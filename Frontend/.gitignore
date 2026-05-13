@@ -1,0 +1,30 @@
+node_modules/
+.env
+.env.local
+firebase-key.json
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/
+*.log
+dist/
+build/
+uploads/
+# Create .gitignore file
+echo "# Dependencies" > .gitignore
+echo "node_modules/" >> .gitignore
+echo "venv/" >> .gitignore
+echo "env/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.pyc" >> .gitignore
+echo ".env" >> .gitignore
+echo ".DS_Store" >> .gitignore
+echo "Thumbs.db" >> .gitignore
+
+# For Python projects, also add:
+echo "*.pyo" >> .gitignore
+echo "*.pyd" >> .gitignore
+echo "dist/" >> .gitignore
+echo "build/" >> .gitignore
+echo "*.egg-info/" >> .gitignore

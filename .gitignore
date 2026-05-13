@@ -1,0 +1,9 @@
+__pycache__/ 
+*.pyc 
+venv_new/ 
+Backend/venv_new/ 
+venv/ 
+uploads/ 
+*.csv 
+uploads/ 
+*.csv 

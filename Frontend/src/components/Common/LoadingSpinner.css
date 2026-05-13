@@ -1,0 +1,301 @@
+/* frontend/src/components/Common/LoadingSpinner.css
+   Professional Loading Spinner with 3D Effects
+*/
+
+/* ============================================
+   LOADING OVERLAY (Full Page Mode)
+   ============================================ */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+}
+
+/* ============================================
+   LOADING CONTAINER
+   ============================================ */
+.loading-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  z-index: 1;
+}
+
+/* ============================================
+   3D SPINNER BASE
+   ============================================ */
+.spinner-3d {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Spinner Rings */
+.spinner-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+.spinner-ring.ring-2 {
+  animation-delay: 0.3s;
+  animation-duration: 1.8s;
+}
+
+.spinner-ring.ring-3 {
+  animation-delay: 0.6s;
+  animation-duration: 2.1s;
+}
+
+/* ============================================
+   SMALL SPINNER (Size: 48px)
+   ============================================ */
+.spinner-small {
+  width: 48px;
+  height: 48px;
+}
+
+.spinner-small .spinner-ring {
+  width: 48px;
+  height: 48px;
+  border-top-color: var(--primary);
+  border-right-color: rgba(99, 102, 241, 0.3);
+}
+
+.spinner-small .spinner-ring.ring-2 {
+  width: 38px;
+  height: 38px;
+  border-bottom-color: var(--secondary);
+  border-left-color: rgba(139, 92, 246, 0.3);
+}
+
+.spinner-small .spinner-ring.ring-3 {
+  width: 28px;
+  height: 28px;
+  border-top-color: var(--success);
+  border-right-color: rgba(16, 185, 129, 0.3);
+}
+
+.spinner-small .spinner-core {
+  width: 18px;
+  height: 18px;
+}
+
+/* ============================================
+   MEDIUM SPINNER (Size: 80px)
+   ============================================ */
+.spinner-medium {
+  width: 80px;
+  height: 80px;
+}
+
+.spinner-medium .spinner-ring {
+  width: 80px;
+  height: 80px;
+  border-top-color: var(--primary);
+  border-right-color: rgba(99, 102, 241, 0.3);
+}
+
+.spinner-medium .spinner-ring.ring-2 {
+  width: 64px;
+  height: 64px;
+  border-bottom-color: var(--secondary);
+  border-left-color: rgba(139, 92, 246, 0.3);
+}
+
+.spinner-medium .spinner-ring.ring-3 {
+  width: 48px;
+  height: 48px;
+  border-top-color: var(--success);
+  border-right-color: rgba(16, 185, 129, 0.3);
+}
+
+.spinner-medium .spinner-core {
+  width: 28px;
+  height: 28px;
+}
+
+/* ============================================
+   LARGE SPINNER (Size: 120px)
+   ============================================ */
+.spinner-large {
+  width: 120px;
+  height: 120px;
+}
+
+.spinner-large .spinner-ring {
+  width: 120px;
+  height: 120px;
+  border-top-color: var(--primary);
+  border-right-color: rgba(99, 102, 241, 0.3);
+  border-width: 3px;
+}
+
+.spinner-large .spinner-ring.ring-2 {
+  width: 96px;
+  height: 96px;
+  border-bottom-color: var(--secondary);
+  border-left-color: rgba(139, 92, 246, 0.3);
+  border-width: 3px;
+}
+
+.spinner-large .spinner-ring.ring-3 {
+  width: 72px;
+  height: 72px;
+  border-top-color: var(--success);
+  border-right-color: rgba(16, 185, 129, 0.3);
+  border-width: 3px;
+}
+
+.spinner-large .spinner-core {
+  width: 40px;
+  height: 40px;
+}
+
+/* ============================================
+   SPINNER CORE (Center Icon)
+   ============================================ */
+.spinner-core {
+  background: var(--primary-gradient);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
+}
+
+.spinner-icon {
+  color: white;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+/* ============================================
+   LOADING TEXT
+   ============================================ */
+.loading-text {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: 2rem;
+  animation: fadeInUp 0.4s ease;
+}
+
+.loading-text-main {
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Animated Dots */
+.loading-dots {
+  display: flex;
+  gap: 2px;
+}
+
+.loading-dots span {
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: 0s; }
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+/* Spin Animation - For Rings */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Pulse Animation - For Core */
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+}
+
+/* Bounce Animation - For Icon */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Dot Pulse Animation - For Loading Dots */
+@keyframes dotPulse {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Fade In Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Fade In Up Animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

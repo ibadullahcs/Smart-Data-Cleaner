@@ -1,0 +1,150 @@
+/* frontend/src/components/Layout/Layout.css
+   Main Layout Styles - Sidebar + Content Area
+*/
+
+/* ============================================
+   MAIN LAYOUT CONTAINER
+   ============================================ */
+.layout {
+  min-height: 100vh;
+  background: var(--light);
+  transition: background var(--transition);
+}
+
+.dark .layout {
+  background: var(--dark-light);
+}
+
+/* ============================================
+   LAYOUT WRAPPER (Sidebar + Content)
+   ============================================ */
+.layout-wrapper {
+  display: flex;
+  min-height: calc(100vh - 60px); /* Subtract navbar height */
+  margin-top: 60px; /* Push below navbar */
+}
+
+/* ============================================
+   SIDEBAR STYLES (Static positioning)
+   ============================================ */
+.layout-wrapper .sidebar {
+  position: relative;
+  top: 0;
+  left: 0;
+  height: auto;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   MAIN CONTENT AREA
+   ============================================ */
+.layout-content {
+  flex: 1;
+  overflow-x: auto;
+  padding: var(--spacing-lg);
+  transition: all var(--transition);
+  background: var(--light);
+  min-width: 0; /* Prevents flex overflow */
+}
+
+.dark .layout-content {
+  background: var(--dark-light);
+}
+
+/* Expanded content when sidebar is collapsed */
+.layout-content.expanded {
+  margin-left: 0;
+}
+
+/* ============================================
+   CONTENT WRAPPER
+   ============================================ */
+.content-wrapper {
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ============================================
+   SCROLLBAR FOR CONTENT AREA
+   ============================================ */
+.layout-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.layout-content::-webkit-scrollbar-track {
+  background: var(--light-dark);
+  border-radius: 4px;
+}
+
+.layout-content::-webkit-scrollbar-thumb {
+  background: var(--gray-light);
+  border-radius: 4px;
+}
+
+.layout-content::-webkit-scrollbar-thumb:hover {
+  background: var(--gray);
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Tablet and Mobile */
+@media (max-width: 768px) {
+  /* Stack wrapper vertically */
+  .layout-wrapper {
+    flex-direction: column;
+  }
+  
+  /* Sidebar becomes fixed overlay on mobile */
+  .layout-wrapper .sidebar {
+    position: fixed;
+    top: 60px;
+    left: -260px;
+    height: calc(100vh - 60px);
+    z-index: 90;
+    transition: left var(--transition);
+  }
+  
+  /* Sidebar slides in when not collapsed */
+  .layout-wrapper .sidebar:not(.collapsed) {
+    left: 0;
+  }
+  
+  /* Content takes full width */
+  .layout-content {
+    width: 100%;
+    padding: var(--spacing-md);
+  }
+}
+
+/* Mobile Small */
+@media (max-width: 480px) {
+  .layout-content {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+  /* Hide sidebar and navbar when printing */
+  .layout-wrapper .sidebar,
+  .layout .navbar {
+    display: none !important;
+  }
+  
+  /* Remove margin when printing */
+  .layout-wrapper {
+    margin-top: 0;
+  }
+  
+  /* Content takes full width for printing */
+  .layout-content {
+    padding: 0;
+    overflow: visible;
+  }
+}

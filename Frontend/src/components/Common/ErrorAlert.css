@@ -1,0 +1,215 @@
+/* frontend/src/components/Common/ErrorAlert.css
+   Professional Error Alert Styles with 3D Effects
+*/
+
+/* ============================================
+   ERROR ALERT CONTAINER
+   ============================================ */
+.error-alert-3d {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: linear-gradient(135deg, #fff5f5 0%, #fee2e2 100%);
+  border-left: 4px solid var(--error);
+  border-radius: var(--border-radius);
+  margin-bottom: var(--spacing-md);
+  box-shadow: var(--shadow-md);
+  animation: slideInRight 0.3s ease forwards;
+  position: relative;
+  overflow: hidden;
+}
+
+.dark .error-alert-3d {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+}
+
+/* Exit Animation */
+.error-alert-3d.exiting {
+  animation: slideOutRight 0.3s ease forwards;
+}
+
+/* Shimmer Border Effect */
+.error-alert-3d::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--error), var(--error-light), transparent);
+  animation: shimmer 2s infinite;
+}
+
+/* ============================================
+   ERROR ICON
+   ============================================ */
+.error-alert-icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--error);
+  animation: pulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   ERROR CONTENT
+   ============================================ */
+.error-alert-content {
+  flex: 1;
+}
+
+.error-alert-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--error);
+  margin-bottom: var(--spacing-xs);
+}
+
+.error-alert-message {
+  font-size: 0.875rem;
+  color: var(--dark);
+}
+
+.dark .error-alert-message {
+  color: var(--light);
+}
+
+/* ============================================
+   ACTION BUTTONS
+   ============================================ */
+.error-alert-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.error-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  border: none;
+  background: transparent;
+}
+
+/* Retry Button */
+.error-action-btn.retry {
+  color: var(--info);
+}
+
+.error-action-btn.retry:hover {
+  background: rgba(59, 130, 246, 0.1);
+  transform: rotate(15deg);
+}
+
+/* Close Button */
+.error-action-btn.close {
+  color: var(--error);
+}
+
+.error-action-btn.close:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+/* Slide In From Right */
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Slide Out To Right */
+@keyframes slideOutRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+}
+
+/* Shimmer Animation for Border */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Pulse Animation for Icon */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Mobile */
+@media (max-width: 768px) {
+  .error-alert-3d {
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-sm);
+  }
+  
+  .error-alert-icon {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .error-alert-title {
+    font-size: 0.75rem;
+  }
+  
+  .error-alert-message {
+    font-size: 0.75rem;
+  }
+  
+  .error-action-btn {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* Mobile Small */
+@media (max-width: 480px) {
+  .error-alert-3d {
+    flex-wrap: wrap;
+  }
+  
+  .error-alert-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: var(--spacing-xs);
+  }
+}

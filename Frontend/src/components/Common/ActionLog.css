@@ -1,0 +1,456 @@
+/* frontend/src/components/Common/ActionLog.css */
+
+.action-log-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.action-log-container {
+  width: 800px;
+  max-width: 90vw;
+  max-height: 85vh;
+  background: var(--white);
+  border-radius: 20px;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+  border: 1px solid var(--border);
+}
+
+.dark .action-log-container {
+  background: var(--dark-light);
+}
+
+/* Header */
+.action-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: white;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-log-header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.close-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* Body */
+.action-log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* Summary Card */
+.summary-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+
+.dark .summary-card {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.05));
+}
+
+.summary-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #10b981;
+}
+
+.summary-info {
+  flex: 1;
+}
+
+.summary-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--dark);
+  margin-bottom: 4px;
+}
+
+.summary-time {
+  font-size: 0.7rem;
+  color: var(--gray);
+}
+
+.summary-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat-label {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* Operations Section */
+.operations-section, .changed-cells-section, .health-section, .message-section {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: var(--light);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.dark .operations-section,
+.dark .changed-cells-section,
+.dark .health-section,
+.dark .message-section {
+  background: var(--dark);
+}
+
+.operations-section h4, .changed-cells-section h4, .health-section h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Operations List */
+.operations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.operation-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--white);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.dark .operation-item {
+  background: var(--dark-light);
+}
+
+.op-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.op-details {
+  flex: 1;
+}
+
+.op-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--dark);
+  text-transform: capitalize;
+}
+
+.op-column {
+  font-size: 0.7rem;
+  color: var(--gray);
+  margin-left: 6px;
+}
+
+.op-stats {
+  font-size: 0.7rem;
+  color: var(--gray);
+}
+
+/* Changed Cells Table */
+.cells-table-wrapper {
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.cells-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.cells-table th,
+.cells-table td {
+  padding: 10px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.cells-table th {
+  background: var(--light-dark);
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.cells-table .row-number {
+  width: 50px;
+  text-align: center;
+  color: var(--gray);
+  font-family: monospace;
+}
+
+.cells-table .old-value {
+  color: var(--error);
+  text-decoration: line-through;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cells-table .new-value {
+  color: var(--success);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more-hint {
+  text-align: center;
+  padding: 12px;
+  font-size: 0.7rem;
+  color: var(--gray);
+  font-style: italic;
+  border-top: 1px solid var(--border);
+}
+
+/* Health Section */
+.health-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.health-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-label {
+  width: 50px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--dark);
+}
+
+.health-bar-item .bar {
+  flex: 1;
+  height: 8px;
+  background: var(--light-dark);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.bar-fill.before {
+  background: #ef4444;
+}
+
+.bar-fill.after {
+  background: #10b981;
+}
+
+.health-value {
+  width: 40px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.improvement-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.improvement-badge.positive {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+}
+
+.improvement-badge.negative {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--error);
+}
+
+/* Message Section */
+.message-section p {
+  font-size: 0.875rem;
+  color: var(--dark);
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Footer */
+.action-log-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--white);
+}
+
+.dark .action-log-footer {
+  background: var(--dark-light);
+}
+
+.undo-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  border: none;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.undo-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.close-btn-secondary {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  background: var(--light-dark);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--dark);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.close-btn-secondary:hover {
+  background: var(--border);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar */
+.action-log-body::-webkit-scrollbar,
+.cells-table-wrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.action-log-body::-webkit-scrollbar-track,
+.cells-table-wrapper::-webkit-scrollbar-track {
+  background: var(--light-dark);
+  border-radius: 3px;
+}
+
+.action-log-body::-webkit-scrollbar-thumb,
+.cells-table-wrapper::-webkit-scrollbar-thumb {
+  background: var(--gray-light);
+  border-radius: 3px;
+}

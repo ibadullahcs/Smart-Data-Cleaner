@@ -1,0 +1,33 @@
+/* frontend/src/components/Charts/QualityGauge.css */
+
+.quality-gauge {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent;
+}
+
+.gauge-canvas {
+  display: block;
+  margin: 0 auto;
+}
+
+.gauge-small {
+  width: 150px;
+  height: 100px;
+}
+
+.gauge-medium {
+  width: 200px;
+  height: 130px;
+}
+
+.gauge-large {
+  width: 300px;
+  height: 180px;
+}
+
+/* Dark mode support */
+.dark .quality-gauge canvas {
+  filter: brightness(0.9);
+}

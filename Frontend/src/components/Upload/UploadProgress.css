@@ -1,0 +1,211 @@
+/* frontend/src/components/Upload/UploadProgress.css */
+/* Professional Upload Progress Styles */
+
+.upload-progress {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: var(--white);
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  animation: slideUp 0.3s ease;
+}
+
+.dark .upload-progress {
+  background: var(--dark-light);
+}
+
+/* Progress Header */
+.progress-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.progress-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.3s ease;
+}
+
+.progress-info {
+  flex: 1;
+}
+
+.progress-status {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.dark .progress-status {
+  color: var(--light);
+}
+
+.progress-filename {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--gray);
+  font-family: var(--font-mono);
+}
+
+.progress-percentage {
+  font-size: 1.5rem;
+  font-weight: 700;
+  transition: color 0.3s ease;
+}
+
+/* Progress Bar */
+.progress-bar-container {
+  height: 6px;
+  background: var(--light-dark);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+/* Progress Stats */
+.progress-stats {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  color: var(--gray);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dark);
+}
+
+.dark .stat-value {
+  color: var(--light);
+}
+
+.stat-value.status-uploading {
+  color: var(--primary);
+}
+
+.stat-value.status-profiling {
+  color: var(--info);
+}
+
+.stat-value.status-complete {
+  color: var(--success);
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .upload-progress {
+    padding: 1rem;
+  }
+  
+  .progress-header {
+    flex-wrap: wrap;
+  }
+  
+  .progress-percentage {
+    font-size: 1.25rem;
+  }
+  
+  .progress-stats {
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .progress-stats {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

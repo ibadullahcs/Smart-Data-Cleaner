@@ -1,0 +1,510 @@
+/* frontend/src/pages/UploadPage.css
+   Professional Upload Page with Drag & Drop
+*/
+
+/* ============================================
+   UPLOAD PAGE CONTAINER
+   ============================================ */
+.upload-page {
+  min-height: calc(100vh - 120px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  animation: fadeInUp 0.4s ease;
+}
+
+.upload-container {
+  max-width: 700px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.upload-hero {
+  text-align: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: rgba(99, 102, 241, 0.1);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: 2rem;
+  margin-bottom: var(--spacing-md);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary);
+  animation: fadeInDown 0.4s ease;
+}
+
+.upload-hero h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm);
+  animation: fadeInUp 0.4s ease 0.1s both;
+}
+
+.upload-hero p {
+  font-size: var(--text-base);
+  color: var(--gray);
+  max-width: 450px;
+  margin: 0 auto;
+  animation: fadeInUp 0.4s ease 0.2s both;
+}
+
+/* ============================================
+   DROP ZONE
+   ============================================ */
+.drop-zone {
+  background: var(--white);
+  border: 2px dashed var(--border);
+  border-radius: var(--border-radius-2xl);
+  padding: var(--spacing-2xl);
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  animation: fadeInUp 0.4s ease 0.3s both;
+}
+
+.dark .drop-zone {
+  background: var(--dark-light);
+}
+
+/* Shine Effect on Hover */
+.drop-zone::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.05), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.drop-zone:hover::before {
+  opacity: 1;
+}
+
+/* Dragging State */
+.drop-zone.dragging {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.02);
+  transform: scale(1.02);
+}
+
+/* File Selected State */
+.drop-zone.has-file {
+  border-color: var(--success);
+  border-style: solid;
+  background: rgba(16, 185, 129, 0.02);
+}
+
+/* ============================================
+   DROP ZONE CONTENT (No File)
+   ============================================ */
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.upload-icon-wrapper {
+  position: relative;
+  margin-bottom: var(--spacing-xs);
+}
+
+.upload-icon-bg {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+  border-radius: var(--border-radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  transition: all 0.3s ease;
+}
+
+.drop-zone:hover .upload-icon-bg {
+  transform: scale(1.05);
+  box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.2);
+}
+
+.drop-zone h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--dark);
+}
+
+.dark .drop-zone h3 {
+  color: var(--light);
+}
+
+.drop-zone p {
+  color: var(--gray);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* Browse Button */
+.browse-btn {
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: var(--spacing-xs);
+}
+
+.browse-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(99, 102, 241, 0.4);
+}
+
+/* Format Hint */
+.format-hint {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.format-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--light-dark);
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--gray);
+  transition: all 0.2s ease;
+}
+
+.format-badge:hover {
+  background: var(--border);
+  transform: translateY(-1px);
+}
+
+.size-limit {
+  font-size: 0.7rem;
+  color: var(--gray-light);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+/* ============================================
+   FILE PREVIEW (After Selection)
+   ============================================ */
+.file-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  animation: slideInUp 0.3s ease;
+}
+
+.file-icon {
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.1));
+  border-radius: var(--border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.file-details {
+  flex: 1;
+  text-align: left;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-weight: 600;
+  color: var(--dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.dark .file-name {
+  color: var(--light);
+}
+
+.remove-file {
+  background: transparent;
+  border: none;
+  color: var(--gray);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.remove-file:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.file-meta {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--light-dark);
+  border-radius: var(--border-radius);
+  font-size: 0.7rem;
+  color: var(--gray);
+}
+
+/* Upload Button */
+.upload-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--success);
+  color: white;
+  border: none;
+  border-radius: 2rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-btn:hover {
+  background: var(--success-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -5px rgba(16, 185, 129, 0.4);
+}
+
+/* ============================================
+   UPLOAD PROGRESS
+   ============================================ */
+.upload-progress {
+  flex: 1;
+  min-width: 150px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--light-dark);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: var(--spacing-xs);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--primary-gradient);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.7rem;
+  color: var(--gray);
+}
+
+.progress-status .spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ============================================
+   ERROR MESSAGE
+   ============================================ */
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid var(--error);
+  border-radius: var(--border-radius);
+  margin-top: var(--spacing-md);
+  color: var(--error);
+  font-size: 0.875rem;
+  animation: shake 0.3s ease;
+}
+
+/* ============================================
+   FEATURES SECTION
+   ============================================ */
+.upload-features {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border);
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.75rem;
+  color: var(--gray);
+}
+
+.feature-divider {
+  width: 4px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 50%;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+@media (max-width: 768px) {
+  .upload-page {
+    padding: var(--spacing-md);
+  }
+  
+  .upload-hero h1 {
+    font-size: 1.75rem;
+  }
+  
+  .drop-zone {
+    padding: var(--spacing-lg);
+  }
+  
+  .file-preview {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .file-details {
+    text-align: center;
+  }
+  
+  .file-meta {
+    justify-content: center;
+  }
+  
+  .upload-features {
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
+  }
+  
+  .feature-divider {
+    display: none;
+  }
+  
+  .feature-item {
+    background: var(--light-dark);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .upload-icon-bg {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .upload-icon-bg svg {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .format-hint {
+    gap: var(--spacing-xs);
+  }
+  
+  .format-badge {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.65rem;
+  }
+  
+  .upload-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -1,0 +1,192 @@
+/* frontend/src/components/Common/Tooltip.css
+   Professional Tooltip with 3D Effects and Animations
+*/
+
+/* ============================================
+   TOOLTIP TRIGGER (Element that shows tooltip)
+   ============================================ */
+.tooltip-trigger {
+  display: inline-block;
+  cursor: help;
+}
+
+/* ============================================
+   TOOLTIP CONTAINER (Fixed positioning)
+   ============================================ */
+.tooltip-3d {
+  position: fixed;
+  z-index: 1000;
+  animation: tooltipFadeIn 0.2s ease forwards;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+/* ============================================
+   TOOLTIP CONTENT
+   ============================================ */
+.tooltip-content {
+  background: linear-gradient(135deg, var(--dark), var(--dark-light));
+  color: var(--light);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--border-radius);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  position: relative;
+  z-index: 2;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Dark mode tooltip (light background, dark text) */
+.dark .tooltip-content {
+  background: linear-gradient(135deg, var(--light), var(--light-dark));
+  color: var(--dark);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   TOOLTIP ARROW
+   ============================================ */
+.tooltip-arrow {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: linear-gradient(135deg, var(--dark), var(--dark-light));
+  transform: rotate(45deg);
+  z-index: 1;
+}
+
+.dark .tooltip-arrow {
+  background: linear-gradient(135deg, var(--light), var(--light-dark));
+}
+
+/* Arrow Positions */
+.tooltip-top .tooltip-arrow {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.tooltip-bottom .tooltip-arrow {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.tooltip-left .tooltip-arrow {
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.tooltip-right .tooltip-arrow {
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+/* ============================================
+   TOOLTIP GLOW EFFECT (On hover)
+   ============================================ */
+.tooltip-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(99, 102, 241, 0.2), transparent);
+  border-radius: var(--border-radius);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.tooltip-3d:hover .tooltip-glow {
+  opacity: 1;
+}
+
+/* ============================================
+   RICH TOOLTIP (with icon and description)
+   ============================================ */
+.tooltip-rich {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 150px;
+  white-space: normal;
+}
+
+.tooltip-rich-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.tooltip-rich-description {
+  font-size: 0.7rem;
+  color: var(--gray-light);
+  line-height: 1.3;
+}
+
+.tooltip-rich-footer {
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.65rem;
+  color: var(--gray);
+}
+
+.dark .tooltip-rich-footer {
+  border-top-color: rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+/* Mobile - Allow text wrapping */
+@media (max-width: 768px) {
+  .tooltip-content {
+    white-space: normal;
+    max-width: 200px;
+  }
+  
+  .tooltip-rich {
+    min-width: 120px;
+  }
+}
+
+/* Mobile Small */
+@media (max-width: 480px) {
+  .tooltip-content {
+    max-width: 160px;
+    font-size: 0.7rem;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+  
+  .tooltip-rich-title {
+    font-size: 0.7rem;
+  }
+  
+  .tooltip-rich-description {
+    font-size: 0.65rem;
+  }
+}
