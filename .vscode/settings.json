@@ -1,9 +1,0 @@
-{
-    "python.analysis.typeCheckingMode": "off",
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportArgumentType": "none",
-        "reportReturnType": "none",
-        "reportGeneralTypeIssues": "none"
-    },
-    "python-envs.pythonProjects": []
-}
