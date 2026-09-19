@@ -16,11 +16,20 @@ const Tooltip = ({
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const triggerRef = useRef(null);
   const tooltipRef = useRef(null);
-  let timeoutId = null;
+  // FIX: previously `let timeoutId = null;` — a plain variable that
+  // gets reset to null on every re-render. If the component re-renders
+  // while a pending show-delay timer exists (common, since parent
+  // state changes frequently on every page this is used), hideTooltip
+  // would read a stale/reset `timeoutId` from the newer render's
+  // closure and call clearTimeout(null), which does nothing — so the
+  // original timer still fires and the tooltip pops up even after the
+  // mouse has already left. useRef persists correctly across renders,
+  // so clearTimeout always targets the real, still-pending timer.
+  const timeoutIdRef = useRef(null);
 
   useEffect(() => {
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (timeoutIdRef.current) clearTimeout(timeoutIdRef.current);
     };
   }, []);
 
@@ -69,14 +78,17 @@ const Tooltip = ({
 
   const showTooltip = () => {
     if (disabled) return;
-    timeoutId = setTimeout(() => {
+    timeoutIdRef.current = setTimeout(() => {
       setIsVisible(true);
       setTimeout(updatePosition, 10);
     }, delay);
   };
 
   const hideTooltip = () => {
-    if (timeoutId) clearTimeout(timeoutId);
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
     setIsVisible(false);
   };
 

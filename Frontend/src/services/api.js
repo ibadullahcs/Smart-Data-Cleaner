@@ -3,13 +3,8 @@
 
 import { supabase } from '../lib/supabase';
 
-// Get API base URL from environment variable
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
-/**
- * Get current Supabase auth token
- * @returns {Promise<string|null>} Access token or null
- */
 async function getAuthToken() {
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -20,12 +15,13 @@ async function getAuthToken() {
   }
 }
 
-/**
- * Generic API call function with error handling and auth
- * @param {string} endpoint - API endpoint
- * @param {Object} options - Fetch options
- * @returns {Promise} Response data
- */
+function buildAuthHeaders(token, extra = {}) {
+  return {
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...extra,
+  };
+}
+
 async function apiCall(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
   const token = await getAuthToken();
@@ -33,7 +29,7 @@ async function apiCall(endpoint, options = {}) {
   const config = {
     headers: {
       'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
+      ...buildAuthHeaders(token),
       ...options.headers,
     },
     ...options,
@@ -51,7 +47,6 @@ async function apiCall(endpoint, options = {}) {
         errorDetail = `HTTP ${response.status}: ${response.statusText}`;
       }
       
-      // Handle unauthorized - token expired
       if (response.status === 401) {
         const { data: { session } } = await supabase.auth.refreshSession();
         if (session) {
@@ -83,30 +78,23 @@ async function apiCall(endpoint, options = {}) {
   }
 }
 
-/**
- * File upload with progress tracking using XMLHttpRequest
- * @param {File} file - File to upload
- * @param {Function} onProgress - Progress callback (0-100)
- * @returns {Promise} Upload result
- */
 async function uploadFile(file, onProgress) {
-  const formData = new FormData();
-  formData.append('file', file);
-  
   const url = `${API_BASE_URL}/upload`;
-  const token = await getAuthToken();
-  
-  return new Promise((resolve, reject) => {
+
+  const attempt = (token, alreadyRetried) => new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
     const xhr = new XMLHttpRequest();
-    
+
     xhr.upload.addEventListener('progress', (event) => {
       if (event.lengthComputable && onProgress) {
         const percent = Math.round((event.loaded / event.total) * 100);
         onProgress(percent);
       }
     });
-    
-    xhr.addEventListener('load', () => {
+
+    xhr.addEventListener('load', async () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText);
@@ -114,55 +102,85 @@ async function uploadFile(file, onProgress) {
         } catch (e) {
           reject(new Error('Invalid response from server'));
         }
-      } else {
+        return;
+      }
+
+      if (xhr.status === 401 && !alreadyRetried) {
         try {
-          const error = JSON.parse(xhr.responseText);
-          reject(new Error(error.detail || `Upload failed: ${xhr.status}`));
-        } catch (e) {
-          reject(new Error(`Upload failed: ${xhr.status}`));
+          const { data: { session } } = await supabase.auth.refreshSession();
+          if (session) {
+            const retryResult = await attempt(session.access_token, true);
+            resolve(retryResult);
+            return;
+          }
+        } catch (refreshErr) {
+          console.error('Session refresh failed during upload retry:', refreshErr);
         }
       }
+
+      try {
+        const error = JSON.parse(xhr.responseText);
+        reject(new Error(error.detail || `Upload failed: ${xhr.status}`));
+      } catch (e) {
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
     });
-    
+
     xhr.addEventListener('error', () => {
       reject(new Error('Network error occurred during upload'));
     });
-    
+
     xhr.open('POST', url);
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
     xhr.send(formData);
   });
+
+  const token = await getAuthToken();
+  return attempt(token, false);
 }
 
-/**
- * Download file (triggers browser download)
- * @param {string} jobId - Job ID
- * @param {string} format - File format (csv, excel)
- * @returns {Promise} Download result
- */
 async function downloadFile(jobId, format = 'csv') {
-  const url = `${API_BASE_URL}/download/${jobId}?format=${format}`;
-  const token = await getAuthToken();
-  
-  try {
+  const url = `${API_BASE_URL}/download/${jobId}?format=${encodeURIComponent(format)}`;
+
+  const attempt = async (token, alreadyRetried) => {
     const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
+      headers: buildAuthHeaders(token),
     });
-    
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Download failed');
+      if (response.status === 401 && !alreadyRetried) {
+        const { data: { session } } = await supabase.auth.refreshSession();
+        if (session) {
+          return attempt(session.access_token, true);
+        }
+      }
+
+      let errorDetail;
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.detail || `HTTP ${response.status}: ${response.statusText}`;
+      } catch {
+        errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+      }
+      throw new Error(errorDetail);
     }
-    
+
+    return response;
+  };
+
+  try {
+    const token = await getAuthToken();
+    const response = await attempt(token, false);
+
     const contentDisposition = response.headers.get('Content-Disposition');
     let filename = `cleaned_data_${jobId}.${format}`;
     if (contentDisposition) {
       const match = contentDisposition.match(/filename="?([^"]+)"?/);
       if (match) filename = match[1];
     }
-    
+
     const blob = await response.blob();
     const url_blob = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -172,7 +190,7 @@ async function downloadFile(jobId, format = 'csv') {
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url_blob);
-    
+
     return { success: true, filename };
   } catch (error) {
     console.error('Download error:', error);
@@ -213,7 +231,7 @@ async function fillBackward(jobId, column) {
 // ============================================
 
 async function removeDuplicates(jobId, keep = 'first', keys = null) {
-  let url = `/clean/remove-duplicates/${jobId}?keep=${keep}`;
+  let url = `/clean/remove-duplicates/${jobId}?keep=${encodeURIComponent(keep)}`;
   if (keys) url += `&keys=${encodeURIComponent(keys)}`;
   return apiCall(url, { method: 'POST' });
 }
@@ -239,19 +257,35 @@ async function toTitlecase(jobId, column) {
 }
 
 async function removeSpecialChars(jobId, column, keep = 'alphanumeric') {
-  return apiCall(`/clean/remove-special/${jobId}?column=${encodeURIComponent(column)}&keep=${keep}`, { method: 'POST' });
+  return apiCall(`/clean/remove-special/${jobId}?column=${encodeURIComponent(column)}&keep=${encodeURIComponent(keep)}`, { method: 'POST' });
 }
 
 async function fixEncoding(jobId, column) {
   return apiCall(`/clean/fix-encoding/${jobId}?column=${encodeURIComponent(column)}`, { method: 'POST' });
 }
 
+async function standardizeCategories(jobId, column, mode = 'auto') {
+  return apiCall(
+    `/clean/standardize-categories/${jobId}?column=${encodeURIComponent(column)}&mode=${encodeURIComponent(mode)}`,
+    { method: 'POST' }
+  );
+}
+
 // ============================================
 // 4. OUTLIER ENDPOINTS
 // ============================================
 
+async function previewOutliers(jobId, column, multiplier = 1.5) {
+  return apiCall(
+    `/clean/preview-outliers/${jobId}?column=${encodeURIComponent(column)}&multiplier=${encodeURIComponent(multiplier)}`
+  );
+}
+
 async function removeOutliersIQR(jobId, column, multiplier = 1.5) {
-  return apiCall(`/clean/remove-outliers-iqr/${jobId}?column=${encodeURIComponent(column)}&multiplier=${multiplier}`, { method: 'POST' });
+  return apiCall(
+    `/clean/remove-outliers-iqr/${jobId}?column=${encodeURIComponent(column)}&multiplier=${encodeURIComponent(multiplier)}`,
+    { method: 'POST' }
+  );
 }
 
 async function capOutliers(jobId, column, lowerPercentile = 1, upperPercentile = 99) {
@@ -263,7 +297,7 @@ async function capOutliers(jobId, column, lowerPercentile = 1, upperPercentile =
 // ============================================
 
 async function toNumeric(jobId, column, errors = 'coerce') {
-  return apiCall(`/clean/to-numeric/${jobId}?column=${encodeURIComponent(column)}&errors=${errors}`, { method: 'POST' });
+  return apiCall(`/clean/to-numeric/${jobId}?column=${encodeURIComponent(column)}&errors=${encodeURIComponent(errors)}`, { method: 'POST' });
 }
 
 async function toDatetime(jobId, column, format = null) {
@@ -348,8 +382,16 @@ async function formatPhones(jobId, column) {
 // 9. SMART & QUICK CLEAN ENDPOINTS
 // ============================================
 
-async function smartClean(jobId) {
-  return apiCall(`/smart-clean/${jobId}`, { method: 'POST' });
+async function smartClean(jobId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.profile) params.set('profile', options.profile);
+  if (options.autoRemoveDuplicates !== undefined) params.set('auto_remove_duplicates', options.autoRemoveDuplicates);
+  if (options.trimSpaces !== undefined) params.set('trim_spaces', options.trimSpaces);
+  if (options.missingStrategy) params.set('missing_strategy', options.missingStrategy);
+  if (options.enableDropThreshold !== undefined) params.set('enable_drop_threshold', options.enableDropThreshold);
+  if (options.dropThreshold !== undefined) params.set('drop_threshold', options.dropThreshold);
+  const qs = params.toString();
+  return apiCall(`/smart-clean/${jobId}${qs ? `?${qs}` : ''}`, { method: 'POST' });
 }
 
 async function quickClean(jobId) {
@@ -357,7 +399,15 @@ async function quickClean(jobId) {
 }
 
 // ============================================
-// 10. PROFILE, ANALYSIS, HISTORY ENDPOINTS
+// 10. UNDO ENDPOINT
+// ============================================
+
+async function undoLastAction(jobId) {
+  return apiCall(`/clean/undo/${jobId}`, { method: 'POST' });
+}
+
+// ============================================
+// 11. PROFILE, ANALYSIS, HISTORY ENDPOINTS
 // ============================================
 
 async function profileData(jobId) {
@@ -381,7 +431,7 @@ async function deleteJob(jobId) {
 }
 
 // ============================================
-// 11. PREVIEW ACTION ENDPOINTS
+// 12. PREVIEW ACTION ENDPOINTS
 // ============================================
 
 async function previewAction(jobId, column, operation, value = null) {
@@ -395,66 +445,48 @@ async function previewAction(jobId, column, operation, value = null) {
 // ============================================
 
 export const api = {
-  // Core
   uploadFile,
   downloadFile,
   profileData,
   smartClean,
   quickClean,
+  undoLastAction,
   getAnalysis,
   getJobs,
   getJobHistory,
   deleteJob,
-  
-  // Missing Values
   fillMean,
   fillMedian,
   fillMode,
   fillConstant,
   fillForward,
   fillBackward,
-  
-  // Duplicates
   removeDuplicates,
-  
-  // Text Cleaning
   trimSpaces,
   toLowercase,
   toUppercase,
   toTitlecase,
   removeSpecialChars,
   fixEncoding,
-  
-  // Outliers
+  standardizeCategories,
+  previewOutliers,
   removeOutliersIQR,
   capOutliers,
-  
-  // Data Types
   toNumeric,
   toDatetime,
-  
-  // Date Operations
   extractYear,
   extractMonth,
   extractDay,
   extractDayOfWeek,
   calculateAge,
-  
-  // String Operations
   splitColumn,
   mergeColumns,
   findReplace,
   renameColumn,
   dropColumn,
-  
-  // Email & Phone
   fixEmails,
   formatPhones,
-  
-  // Preview
   previewAction,
-  
-  // Generic API call
   apiCall
 };
 

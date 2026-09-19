@@ -4,10 +4,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
-// Create Context
 const AppContext = createContext();
 
-// Custom hook to use context
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) {
@@ -16,12 +14,76 @@ export const useApp = () => {
   return context;
 };
 
-// Provider Component
-export const AppProvider = ({ children }) => {
-  // ============ Navigation State ============
-  const [currentPage, setCurrentPage] = useState('upload'); // upload, dashboard, cleaner, analysis, history, settings
+export const SETTINGS_STORAGE_KEY = 'smart_cleaner_settings';
 
-  // ============ Data State ============
+export const DEFAULT_SETTINGS = {
+  version: '2.0',
+  general: {
+    defaultPage: 'upload',
+    language: 'en',
+    dateFormat: 'YYYY-MM-DD',
+    numberFormat: '1,234.56',
+    itemsPerPage: 50,
+    autoSave: true
+  },
+  cleaning: {
+    missingValueStrategy: 'median',
+    enableDropThreshold: false,
+    dropThreshold: 50,
+    autoRemoveDuplicates: true,
+    trimSpaces: true,
+    lowercaseText: false,
+    smartCleanProfile: 'balanced'
+  },
+  analysis: {
+    defaultChartType: 'bar',
+    enableAnimations: true,
+    showAdvancedInsights: true,
+    animationSpeed: 'normal'
+  },
+  appearance: {
+    theme: 'system',
+    accentColor: '#6366f1',
+    fontSize: 'medium',
+    enableGlassmorphism: true,
+    reduceMotion: false
+  },
+  notifications: {
+    cleaningComplete: true,
+    showErrors: true,
+    smartSuggestions: true,
+    soundEnabled: false
+  },
+  privacy: {
+    autoDeleteData: false,
+    dataStorageLocation: 'server',
+    shareAnalytics: false
+  }
+};
+
+const loadPersistedSettings = () => {
+  const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
+  if (!saved) return DEFAULT_SETTINGS;
+  try {
+    const parsed = JSON.parse(saved);
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      general: { ...DEFAULT_SETTINGS.general, ...parsed.general },
+      cleaning: { ...DEFAULT_SETTINGS.cleaning, ...parsed.cleaning },
+      analysis: { ...DEFAULT_SETTINGS.analysis, ...parsed.analysis },
+      appearance: { ...DEFAULT_SETTINGS.appearance, ...parsed.appearance },
+      notifications: { ...DEFAULT_SETTINGS.notifications, ...parsed.notifications },
+      privacy: { ...DEFAULT_SETTINGS.privacy, ...parsed.privacy }
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+};
+
+export const AppProvider = ({ children }) => {
+  const [currentPage, setCurrentPage] = useState('upload');
+
   const [jobId, setJobId] = useState(null);
   const [filename, setFilename] = useState(null);
   const [fileSize, setFileSize] = useState(null);
@@ -32,7 +94,13 @@ export const AppProvider = ({ children }) => {
   const [previewData, setPreviewData] = useState([]);
   const [cleanedData, setCleanedData] = useState(null);
 
-  // ============ UI State ============
+  // NEW: honest truncation tracking for the data table preview.
+  // Set whenever the backend profile response includes
+  // preview_truncated/preview_rows_shown (initial upload AND every
+  // cleaning action afterward).
+  const [previewTruncated, setPreviewTruncated] = useState(false);
+  const [previewRowsShown, setPreviewRowsShown] = useState(0);
+
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [cleaningProgress, setCleaningProgress] = useState(0);
@@ -42,7 +110,6 @@ export const AppProvider = ({ children }) => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // ============ Cleaning State ============
   const [cleaningHistory, setCleaningHistory] = useState(() => {
     const saved = localStorage.getItem('cleaningHistory');
     return saved ? JSON.parse(saved) : [];
@@ -51,31 +118,28 @@ export const AppProvider = ({ children }) => {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [cleaningResults, setCleaningResults] = useState(null);
 
-  // ============ Export State ============
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportFormat, setExportFormat] = useState('csv');
 
-  // ============ Settings ============
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem('appSettings');
-    return saved ? JSON.parse(saved) : {
-      autoSaveHistory: true,
-      maxHistoryItems: 50,
-      defaultExportFormat: 'csv',
-      showColumnTypes: true,
-      confirmBeforeClean: true,
-      autoRefreshDashboard: true,
-    };
-  });
+  const [settings, setSettings] = useState(loadPersistedSettings);
 
-  // ============ Table State ============
+  useEffect(() => {
+    document.documentElement.style.setProperty('--primary', settings.appearance.accentColor);
+    document.documentElement.classList.toggle('reduce-motion', settings.appearance.reduceMotion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const applySettings = useCallback((newSettings) => {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+    setSettings(newSettings);
+  }, []);
+
   const [currentPageNum, setCurrentPageNum] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [sortColumn, setSortColumn] = useState(null);
   const [sortDirection, setSortDirection] = useState('asc');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ============ Toast Notification Helpers ============
   const showSuccess = useCallback((message) => {
     toast.success(message, {
       duration: 4000,
@@ -90,6 +154,10 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const showError = useCallback((message) => {
+    if (!settings.notifications.showErrors) {
+      console.error('[Notifications disabled] Error:', message);
+      return;
+    }
     toast.error(message, {
       duration: 5000,
       position: 'top-right',
@@ -100,7 +168,7 @@ export const AppProvider = ({ children }) => {
         borderLeft: '4px solid var(--error)',
       },
     });
-  }, []);
+  }, [settings.notifications.showErrors]);
 
   const showInfo = useCallback((message) => {
     toast(message, {
@@ -128,9 +196,23 @@ export const AppProvider = ({ children }) => {
     });
   }, []);
 
-  // ============ Data Actions ============
+  const showCleaningComplete = useCallback((message) => {
+    if (!settings.notifications.cleaningComplete) {
+      console.log('[Cleaning-complete notifications disabled]', message);
+      return;
+    }
+    toast.success(message, {
+      duration: 4000,
+      position: 'top-right',
+      icon: '✨',
+      style: {
+        background: 'var(--white)',
+        color: 'var(--dark)',
+        borderLeft: '4px solid var(--success)',
+      },
+    });
+  }, [settings.notifications.cleaningComplete]);
 
-  // Clear all data (new upload)
   const clearData = useCallback(() => {
     setJobId(null);
     setFilename(null);
@@ -140,6 +222,8 @@ export const AppProvider = ({ children }) => {
     setQualityScore(0);
     setColumnProfile([]);
     setPreviewData([]);
+    setPreviewTruncated(false);
+    setPreviewRowsShown(0);
     setCleanedData(null);
     setCleaningResults(null);
     setCurrentPageNum(1);
@@ -148,7 +232,6 @@ export const AppProvider = ({ children }) => {
     showInfo('Data cleared. Ready for new upload.');
   }, [showInfo]);
 
-  // Set upload data after successful upload
   const setUploadData = useCallback((data) => {
     setJobId(data.job_id);
     setFilename(data.filename);
@@ -157,54 +240,34 @@ export const AppProvider = ({ children }) => {
     showSuccess(`File "${data.filename}" uploaded successfully!`);
   }, [showSuccess]);
 
-  // Set profile data after profiling
   const setProfileData = useCallback((data) => {
     setTotalRows(data.total_rows);
     setTotalColumns(data.total_columns);
     setQualityScore(data.quality_score);
     setColumnProfile(data.columns);
     setPreviewData(data.preview_data);
+    // NEW: capture honest truncation info from the backend response.
+    setPreviewTruncated(!!data.preview_truncated);
+    setPreviewRowsShown(data.preview_rows_shown ?? data.preview_data?.length ?? 0);
     showSuccess(`Data profiled: ${data.total_rows.toLocaleString()} rows, ${data.total_columns} columns`);
   }, [showSuccess]);
 
-  // ============ History Actions ============
-
-  // Add to cleaning history
   const addToHistory = useCallback((job) => {
     setCleaningHistory(prev => {
       const newHistory = [job, ...prev];
-      const maxItems = settings.maxHistoryItems;
-      const trimmedHistory = newHistory.slice(0, maxItems);
-      if (settings.autoSaveHistory) {
-        localStorage.setItem('cleaningHistory', JSON.stringify(trimmedHistory));
-      }
+      const trimmedHistory = newHistory.slice(0, 50);
+      localStorage.setItem('cleaningHistory', JSON.stringify(trimmedHistory));
       return trimmedHistory;
     });
     showSuccess('Job added to history');
-  }, [settings.maxHistoryItems, settings.autoSaveHistory, showSuccess]);
+  }, [showSuccess]);
 
-  // Clear history
   const clearHistory = useCallback(() => {
     setCleaningHistory([]);
     localStorage.removeItem('cleaningHistory');
     showInfo('Cleaning history cleared');
   }, [showInfo]);
 
-  // ============ Settings Actions ============
-
-  // Update settings
-  const updateSettings = useCallback((newSettings) => {
-    setSettings(prev => {
-      const updated = { ...prev, ...newSettings };
-      localStorage.setItem('appSettings', JSON.stringify(updated));
-      showSuccess('Settings updated');
-      return updated;
-    });
-  }, [showSuccess]);
-
-  // ============ Theme Actions ============
-
-  // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
       const newValue = !prev;
@@ -220,7 +283,6 @@ export const AppProvider = ({ children }) => {
     });
   }, [showSuccess]);
 
-  // Apply dark mode on mount
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -229,12 +291,8 @@ export const AppProvider = ({ children }) => {
     }
   }, [darkMode]);
 
-  // ============ Context Value ============
   const value = {
-    // Navigation
     currentPage, setCurrentPage,
-
-    // Data
     jobId, setJobId,
     filename, setFilename,
     fileSize, setFileSize,
@@ -243,38 +301,28 @@ export const AppProvider = ({ children }) => {
     qualityScore, setQualityScore,
     columnProfile, setColumnProfile,
     previewData, setPreviewData,
+    // NEW
+    previewTruncated, setPreviewTruncated,
+    previewRowsShown, setPreviewRowsShown,
     cleanedData, setCleanedData,
-
-    // UI State
     isLoading, setIsLoading,
     uploadProgress, setUploadProgress,
     cleaningProgress, setCleaningProgress,
     darkMode, toggleDarkMode,
-
-    // Toast Notifications
-    showSuccess, showError, showInfo, showWarning,
-
-    // Cleaning
+    showSuccess, showError, showInfo, showWarning, showCleaningComplete,
     cleaningHistory, setCleaningHistory,
     pendingChanges, setPendingChanges,
     showReviewModal, setShowReviewModal,
     cleaningResults, setCleaningResults,
-
-    // Export
     showExportModal, setShowExportModal,
     exportFormat, setExportFormat,
-
-    // Settings
-    settings, updateSettings,
-
-    // Table
+    settings,
+    applySettings,
     currentPageNum, setCurrentPageNum,
     rowsPerPage, setRowsPerPage,
     sortColumn, setSortColumn,
     sortDirection, setSortDirection,
     searchTerm, setSearchTerm,
-
-    // Actions
     clearData,
     setUploadData,
     setProfileData,

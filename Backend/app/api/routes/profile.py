@@ -44,17 +44,6 @@ async def get_profile(
     print(f"👤 User Email: {current_user.get('email')}")
     
     try:
-        # First, let's query ALL jobs for this user to debug
-        all_jobs = await supabase_client.query(
-            "cleaning_jobs",
-            select="*",
-            filters={"user_id": current_user["id"]}
-        )
-        print(f"📋 All jobs for user: {len(all_jobs)} found")
-        for job in all_jobs:
-            print(f"   - Job ID: {job.get('id')}, Status: {job.get('status')}")
-        
-        # Now find the specific job
         jobs = await supabase_client.query(
             "cleaning_jobs",
             select="*",
@@ -120,7 +109,10 @@ async def get_profile(
             "total_columns": total_columns,
             "quality_score": profile_result["quality_score"],
             "columns": profile_result["columns"],
-            "preview_data": profile_result["preview_data"]
+            "preview_data": profile_result["preview_data"],
+            # NEW: honest truncation reporting — see profiler.py fix.
+            "preview_truncated": profile_result.get("preview_truncated", False),
+            "preview_rows_shown": profile_result.get("preview_rows_shown", len(profile_result["preview_data"]))
         }
         
         print(f"📊 Returning profile: {total_rows} rows, {len(profile_result['columns'])} columns")

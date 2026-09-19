@@ -7,14 +7,13 @@ import {
   Hash, AlertCircle, Calendar, Mail, Phone, TrendingUp,
   Edit3, Trash2, Eye, Download, RefreshCw, Sparkles,
   ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Activity,
-  Database, Layers, BarChart3, Shield, Zap, Rocket, Wand2
+  Database, Layers, BarChart3, Shield, Zap, Rocket, Wand2, Loader2
 } from 'lucide-react';
 import './ActionLog.css';
 
-const ActionLog = ({ isOpen, onClose, action, onUndo }) => {
+const ActionLog = ({ isOpen, onClose, action, onUndo, canUndo = true }) => {
   if (!isOpen || !action) return null;
 
-  // Get icon for operation type
   const getOperationIcon = (operation) => {
     const icons = {
       'remove_duplicates': <Copy size={14} />,
@@ -46,7 +45,6 @@ const ActionLog = ({ isOpen, onClose, action, onUndo }) => {
     return icons[operation] || <History size={14} />;
   };
 
-  // Get color for operation type
   const getOperationColor = (operation) => {
     if (operation.includes('remove')) return '#ef4444';
     if (operation.includes('fill')) return '#10b981';
@@ -58,18 +56,20 @@ const ActionLog = ({ isOpen, onClose, action, onUndo }) => {
     return '#6366f1';
   };
 
-  // Format rows affected text
   const formatRowsAffected = (rows) => {
     if (!rows || rows === 0) return '';
     if (rows === 1) return '1 row affected';
     return `${rows.toLocaleString()} rows affected`;
   };
 
-  // Format timestamp
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     return date.toLocaleString();
+  };
+
+  const handleUndoClick = () => {
+    if (onUndo) onUndo(action.id);
   };
 
   return (
@@ -232,7 +232,15 @@ const ActionLog = ({ isOpen, onClose, action, onUndo }) => {
 
         {/* Footer */}
         <div className="action-log-footer">
-          <button className="undo-btn" onClick={() => onUndo && onUndo(action.id)}>
+          {/* FIX (real Undo): restored genuine functionality and copy.
+              Disabled via the canUndo prop (backend's single undo
+              slot), not permanently disabled as before. */}
+          <button
+            className="undo-btn"
+            onClick={handleUndoClick}
+            disabled={!canUndo}
+            title={canUndo ? 'Undo this action' : 'Nothing to undo'}
+          >
             <Undo size={16} />
             Undo Changes
           </button>

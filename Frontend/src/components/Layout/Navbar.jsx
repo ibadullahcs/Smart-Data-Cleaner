@@ -17,7 +17,12 @@ const Navbar = ({ onToggleSidebar, sidebarCollapsed }) => {
   const { 
     darkMode, toggleDarkMode, jobId, filename, 
     totalRows, totalColumns, qualityScore, 
-    showSuccess, showError, setCurrentPage
+    showSuccess, showError, showInfo, setCurrentPage,
+    // FIX (stale quality score / fake refresh / logout leak):
+    // need the profile setters to genuinely refresh data, and
+    // clearData to wipe dataset state on logout.
+    setTotalRows, setTotalColumns, setQualityScore, setColumnProfile, setPreviewData,
+    clearData
   } = useApp();
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -47,12 +52,38 @@ const Navbar = ({ onToggleSidebar, sidebarCollapsed }) => {
     }
   };
 
-  const handleRefresh = () => {
-    window.location.reload();
+  // FIX: previously called window.location.reload(), which wipes the
+  // entire in-memory session (uploaded file, cleaning progress,
+  // everything) — a real risk of derailing a live demo. Now it
+  // actually re-fetches the current job's profile data and updates
+  // AppContext, without losing anything.
+  const handleRefresh = async () => {
+    if (!jobId) {
+      showInfo('No active dataset to refresh.');
+      return;
+    }
+    try {
+      const refreshed = await api.profileData(jobId);
+      setTotalRows(refreshed.total_rows);
+      setTotalColumns(refreshed.total_columns);
+      setQualityScore(refreshed.quality_score);
+      setColumnProfile(refreshed.columns);
+      setPreviewData(refreshed.preview_data);
+      showSuccess('Data refreshed');
+    } catch (err) {
+      showError(err.message || 'Failed to refresh data');
+    }
   };
 
   const handleLogout = async () => {
     await signOut();
+    // FIX: previously left all dataset state (jobId, filename,
+    // columnProfile, etc.) in AppContext after logout. If a different
+    // user logged in afterward in the same browser session, they
+    // could briefly or persistently see the previous user's dataset
+    // metadata. clearData() already existed in AppContext but was
+    // never called from the logout path.
+    clearData();
     setCurrentPage('login');
   };
 
@@ -108,7 +139,7 @@ const Navbar = ({ onToggleSidebar, sidebarCollapsed }) => {
           )}
 
           {/* Refresh Button */}
-          <Tooltip content="Refresh page" position="bottom">
+          <Tooltip content="Refresh data" position="bottom">
             <button className="nav-icon-btn" onClick={handleRefresh}>
               <RefreshCw size={18} />
             </button>

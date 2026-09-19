@@ -1,8 +1,8 @@
 // frontend/src/pages/SettingsPage.jsx
-// Professional Settings Page - Tabbed Layout with Preferences
+// Professional Settings Page - unified with AppContext, genuine autosave
 
-import React, { useState, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useApp, DEFAULT_SETTINGS } from '../context/AppContext';
 import { 
   Settings, Save, RotateCcw, Download, Upload, 
   Sun, Moon, Monitor, Globe, Calendar, Hash,
@@ -12,148 +12,152 @@ import {
   Sliders, ToggleLeft, ToggleRight, Lock, Unlock,
   Trash2, RefreshCw, FileJson, FileText,
   Activity, BarChart3, Palette, Sparkles, Brush,
-  Filter, TrendingUp, Layers, Clock, Volume2, VolumeX
+  Filter, TrendingUp, Layers, Clock, Volume2, VolumeX,
+  Search, CheckCircle2, Info
 } from 'lucide-react';
 import Tooltip from '../components/Common/Tooltip';
 import './SettingsPage.css';
 
-// Default settings
-const DEFAULT_SETTINGS = {
-  version: '2.0',
-  general: {
-    defaultPage: 'upload',
-    theme: 'system',
-    language: 'en',
-    dateFormat: 'YYYY-MM-DD',
-    numberFormat: '1,234.56',
-    itemsPerPage: 50,
-    autoSave: true
-  },
-  cleaning: {
-    missingValueStrategy: 'median',
-    dropThreshold: 50,
-    autoRemoveDuplicates: false,
-    trimSpaces: true,
-    lowercaseText: false,
-    smartCleanProfile: 'balanced'  // fast, balanced, deep
-  },
-  analysis: {
-    defaultChartType: 'bar',
-    enableAnimations: true,
-    showAdvancedInsights: true,
-    animationSpeed: 'normal',  // slow, normal, fast
-    enable3DCharts: false
-  },
-  appearance: {
-    theme: 'system',
-    accentColor: '#6366f1',
-    fontSize: 'medium',
-    enableGlassmorphism: true,
-    reduceMotion: false
-  },
-  notifications: {
-    cleaningComplete: true,
-    showErrors: true,
-    smartSuggestions: true,
-    soundEnabled: false
-  },
-  privacy: {
-    autoDeleteData: false,
-    dataStorageLocation: 'server',
-    shareAnalytics: false
+const StatusTag = ({ status, note }) => {
+  if (status === 'live') {
+    return (
+      <Tooltip content={note || 'This setting actively affects the app'} position="top">
+        <span className="status-tag live">
+          <CheckCircle2 size={11} /> Live
+        </span>
+      </Tooltip>
+    );
   }
+  return (
+    <Tooltip content={note || 'Saved, but not yet applied anywhere in the app'} position="top">
+      <span className="status-tag pending">
+        <Info size={11} /> Not yet applied
+      </span>
+    </Tooltip>
+  );
 };
 
-// Storage key
-const SETTINGS_STORAGE_KEY = 'smart_cleaner_settings';
-
-// Helper functions
-const loadSettings = () => {
-  const saved = localStorage.getItem(SETTINGS_STORAGE_KEY);
-  if (saved) {
-    try {
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
-    } catch {
-      return DEFAULT_SETTINGS;
-    }
+const SettingRow = ({ label, description, status, statusNote, searchQuery, children }) => {
+  if (searchQuery) {
+    const haystack = `${label} ${description || ''}`.toLowerCase();
+    if (!haystack.includes(searchQuery.toLowerCase())) return null;
   }
-  return DEFAULT_SETTINGS;
-};
-
-const saveSettings = (settings) => {
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  return (
+    <div className="setting-row">
+      <div className="setting-info">
+        <div className="setting-label-line">
+          <label>{label}</label>
+          <StatusTag status={status} note={statusNote} />
+        </div>
+        {description && <p className="setting-desc">{description}</p>}
+      </div>
+      <div className="setting-control">{children}</div>
+    </div>
+  );
 };
 
 const SettingsPage = () => {
-  const { darkMode, toggleDarkMode, showSuccess, showError, showInfo } = useApp();
-  
-  // ============ STATE ============
-  const [settings, setSettings] = useState(loadSettings);
+  const {
+    darkMode, toggleDarkMode, showSuccess, showError, showInfo,
+    settings: contextSettings, applySettings
+  } = useApp();
+
+  const [settings, setSettings] = useState(contextSettings);
   const [activeCategory, setActiveCategory] = useState('general');
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const autoSaveTimer = useRef(null);
 
-  // Track changes
   useEffect(() => {
-    const saved = loadSettings();
-    if (JSON.stringify(saved) !== JSON.stringify(settings)) {
-      setHasChanges(true);
-    } else {
+    setHasChanges(JSON.stringify(contextSettings) !== JSON.stringify(settings));
+  }, [settings, contextSettings]);
+
+  useEffect(() => {
+    if (!settings.general.autoSave) return;
+    if (JSON.stringify(contextSettings) === JSON.stringify(settings)) return;
+
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => {
+      applySettings(settings);
       setHasChanges(false);
-    }
+    }, 800);
+
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  // Update setting
   const updateSetting = (category, key, value) => {
     setSettings(prev => ({
       ...prev,
-      [category]: {
-        ...prev[category],
-        [key]: value
-      }
+      [category]: { ...prev[category], [key]: value }
     }));
   };
 
-  // Save all settings
+  const handleThemeChange = (value) => {
+    const next = { ...settings, appearance: { ...settings.appearance, theme: value } };
+    setSettings(next);
+    applySettings(next);
+
+    let shouldBeDark;
+    if (value === 'dark') shouldBeDark = true;
+    else if (value === 'light') shouldBeDark = false;
+    else shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (shouldBeDark !== darkMode) toggleDarkMode();
+  };
+
+  const handleAccentChange = (value) => {
+    const next = { ...settings, appearance: { ...settings.appearance, accentColor: value } };
+    setSettings(next);
+    applySettings(next);
+    document.documentElement.style.setProperty('--primary', value);
+  };
+
+  const handleReduceMotionChange = (value) => {
+    const next = { ...settings, appearance: { ...settings.appearance, reduceMotion: value } };
+    setSettings(next);
+    applySettings(next);
+    document.documentElement.classList.toggle('reduce-motion', value);
+  };
+
   const handleSave = () => {
     setIsSaving(true);
     setTimeout(() => {
-      saveSettings(settings);
-      
-      // Apply theme immediately
-      if (settings.appearance.theme === 'dark') {
-        document.documentElement.classList.add('dark');
-        if (!darkMode) toggleDarkMode();
-      } else if (settings.appearance.theme === 'light') {
-        document.documentElement.classList.remove('dark');
-        if (darkMode) toggleDarkMode();
-      } else if (settings.appearance.theme === 'system') {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (prefersDark) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-      }
-      
-      // Apply accent color
-      document.documentElement.style.setProperty('--primary', settings.appearance.accentColor);
-      
+      applySettings(settings);
       showSuccess('Settings saved successfully');
       setIsSaving(false);
       setHasChanges(false);
-    }, 500);
+    }, 400);
   };
 
-  // Reset to defaults
   const handleReset = () => {
-    if (window.confirm('Reset all settings to defaults? This cannot be undone.')) {
+    if (window.confirm('Reset ALL settings to defaults? This cannot be undone.')) {
       setSettings(DEFAULT_SETTINGS);
+      applySettings(DEFAULT_SETTINGS);
+      handleThemeChange(DEFAULT_SETTINGS.appearance.theme);
+      document.documentElement.style.setProperty('--primary', DEFAULT_SETTINGS.appearance.accentColor);
+      document.documentElement.classList.toggle('reduce-motion', DEFAULT_SETTINGS.appearance.reduceMotion);
       showInfo('Settings reset to defaults');
     }
   };
 
-  // Export settings
+  const handleResetCategory = () => {
+    const label = categories.find(c => c.id === activeCategory)?.label || activeCategory;
+    if (window.confirm(`Reset "${label}" settings to defaults?`)) {
+      const next = { ...settings, [activeCategory]: DEFAULT_SETTINGS[activeCategory] };
+      setSettings(next);
+      if (activeCategory === 'appearance') {
+        applySettings(next);
+        handleThemeChange(DEFAULT_SETTINGS.appearance.theme);
+        document.documentElement.style.setProperty('--primary', DEFAULT_SETTINGS.appearance.accentColor);
+        document.documentElement.classList.toggle('reduce-motion', DEFAULT_SETTINGS.appearance.reduceMotion);
+      }
+      showInfo(`${label} settings reset`);
+    }
+  };
+
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -165,7 +169,6 @@ const SettingsPage = () => {
     showSuccess('Settings exported');
   };
 
-  // Import settings
   const handleImport = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -175,7 +178,7 @@ const SettingsPage = () => {
       try {
         const imported = JSON.parse(e.target.result);
         setSettings({ ...DEFAULT_SETTINGS, ...imported });
-        showSuccess('Settings imported');
+        showSuccess('Settings imported — click Save (or enable Auto Save) to keep them');
       } catch (err) {
         showError('Invalid settings file');
       }
@@ -184,7 +187,6 @@ const SettingsPage = () => {
     event.target.value = '';
   };
 
-  // Clear cache
   const handleClearCache = () => {
     if (window.confirm('Clear all cached data? This will not delete your sessions.')) {
       localStorage.removeItem('smart_cleaner_history');
@@ -229,9 +231,9 @@ const SettingsPage = () => {
   ];
 
   const smartCleanProfiles = [
-    { value: 'fast', label: 'Fast Clean', description: 'Basic cleaning only', icon: <Zap size={14} /> },
+    { value: 'fast', label: 'Fast Clean', description: 'Duplicates + trim only', icon: <Zap size={14} /> },
     { value: 'balanced', label: 'Balanced', description: 'Standard cleaning', icon: <Activity size={14} /> },
-    { value: 'deep', label: 'Deep Clean', description: 'Aggressive cleaning', icon: <Sparkles size={14} /> }
+    { value: 'deep', label: 'Deep Clean', description: 'Also fills text/category gaps', icon: <Sparkles size={14} /> }
   ];
 
   const chartTypeOptions = [
@@ -261,9 +263,11 @@ const SettingsPage = () => {
     { value: '#06b6d4', label: 'Cyan', color: '#06b6d4' }
   ];
 
+  // Recomputed for this revision: 20 of 28 settings are genuinely live.
+  const functionalCounts = useMemo(() => ({ live: 20, total: 28 }), []);
+
   return (
     <div className="settings-page">
-      {/* Header */}
       <div className="settings-header">
         <div className="header-left">
           <Settings size={24} />
@@ -282,10 +286,10 @@ const SettingsPage = () => {
             Import
             <input type="file" accept=".json" onChange={handleImport} hidden />
           </label>
-          <Tooltip content="Reset to defaults" position="bottom">
+          <Tooltip content="Reset all settings to defaults" position="bottom">
             <button className="settings-btn reset" onClick={handleReset}>
               <RotateCcw size={16} />
-              Reset
+              Reset All
             </button>
           </Tooltip>
           <button className={`save-btn ${hasChanges ? 'active' : ''}`} onClick={handleSave} disabled={!hasChanges || isSaving}>
@@ -304,8 +308,25 @@ const SettingsPage = () => {
         </div>
       </div>
 
+      <div className="settings-overview-strip">
+        <div className="overview-preview-card">
+          <div className="preview-swatch" style={{ background: settings.appearance.accentColor }} />
+          <div className="preview-info">
+            <span className="preview-title">Current appearance</span>
+            <span className="preview-detail">
+              {themeOptions.find(t => t.value === settings.appearance.theme)?.label || 'System'} theme · Accent {settings.appearance.accentColor}
+            </span>
+          </div>
+        </div>
+        <div className="overview-status-card">
+          <Info size={16} />
+          <span>
+            <strong>{functionalCounts.live}</strong> of <strong>{functionalCounts.total}</strong> settings are actively applied right now — the rest are saved but not yet wired to app behavior, clearly marked below.
+          </span>
+        </div>
+      </div>
+
       <div className="settings-container">
-        {/* Sidebar */}
         <div className="settings-sidebar">
           {categories.map(cat => (
             <button
@@ -320,8 +341,22 @@ const SettingsPage = () => {
           ))}
         </div>
 
-        {/* Content */}
         <div className="settings-content">
+
+          <div className="settings-search">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search settings..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="clear-settings-search" onClick={() => setSearchQuery('')}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
           
           {/* ============ GENERAL SETTINGS ============ */}
           {activeCategory === 'general' && (
@@ -330,80 +365,78 @@ const SettingsPage = () => {
               <p className="section-desc">Customize how Smart Cleaner behaves</p>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Default Page</label>
-                    <p className="setting-desc">Page to show after successful upload</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.general.defaultPage}
-                      onChange={(e) => updateSetting('general', 'defaultPage', e.target.value)}
-                    >
-                      {pageOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Default Page After Upload"
+                  description="Page to show after a successful upload"
+                  status="live"
+                  statusNote="Genuinely used by the Upload page's post-upload redirect"
+                  searchQuery={searchQuery}
+                >
+                  <select 
+                    value={settings.general.defaultPage}
+                    onChange={(e) => updateSetting('general', 'defaultPage', e.target.value)}
+                  >
+                    {pageOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Date Format</label>
-                    <p className="setting-desc">How dates are displayed throughout the app</p>
+                <SettingRow
+                  label="Date Format"
+                  description="How dates are displayed throughout the app"
+                  status="pending"
+                  searchQuery={searchQuery}
+                >
+                  <div className="radio-group">
+                    {dateFormatOptions.map(opt => (
+                      <label key={opt.value} className="radio-label">
+                        <input
+                          type="radio"
+                          name="dateFormat"
+                          value={opt.value}
+                          checked={settings.general.dateFormat === opt.value}
+                          onChange={(e) => updateSetting('general', 'dateFormat', e.target.value)}
+                        />
+                        <span>{opt.label}</span>
+                        <small>({opt.example})</small>
+                      </label>
+                    ))}
                   </div>
-                  <div className="setting-control">
-                    <div className="radio-group">
-                      {dateFormatOptions.map(opt => (
-                        <label key={opt.value} className="radio-label">
-                          <input
-                            type="radio"
-                            name="dateFormat"
-                            value={opt.value}
-                            checked={settings.general.dateFormat === opt.value}
-                            onChange={(e) => updateSetting('general', 'dateFormat', e.target.value)}
-                          />
-                          <span>{opt.label}</span>
-                          <small>({opt.example})</small>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Items Per Page</label>
-                    <p className="setting-desc">Default number of rows to show in tables</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.general.itemsPerPage}
-                      onChange={(e) => updateSetting('general', 'itemsPerPage', parseInt(e.target.value))}
-                    >
-                      <option value={25}>25 rows</option>
-                      <option value={50}>50 rows</option>
-                      <option value={100}>100 rows</option>
-                      <option value={250}>250 rows</option>
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Items Per Page"
+                  description="Default number of rows shown in the Cleaner table"
+                  status="live"
+                  statusNote="Sets the Cleaner page's initial rows-per-page — change it there afterward any time"
+                  searchQuery={searchQuery}
+                >
+                  <select 
+                    value={settings.general.itemsPerPage}
+                    onChange={(e) => updateSetting('general', 'itemsPerPage', parseInt(e.target.value))}
+                  >
+                    <option value={25}>25 rows</option>
+                    <option value={50}>50 rows</option>
+                    <option value={100}>100 rows</option>
+                    <option value={250}>250 rows</option>
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Auto Save</label>
-                    <p className="setting-desc">Automatically save settings changes</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.general.autoSave ? 'active' : ''}`}
-                      onClick={() => updateSetting('general', 'autoSave', !settings.general.autoSave)}
-                    >
-                      {settings.general.autoSave ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.general.autoSave ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Auto Save Settings"
+                  description="Save changes automatically as you make them, without clicking Save"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.general.autoSave ? 'active' : ''}`}
+                    onClick={() => updateSetting('general', 'autoSave', !settings.general.autoSave)}
+                  >
+                    {settings.general.autoSave ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.general.autoSave ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
               </div>
             </div>
           )}
@@ -412,98 +445,114 @@ const SettingsPage = () => {
           {activeCategory === 'cleaning' && (
             <div className="settings-section">
               <h2>Cleaning Preferences</h2>
-              <p className="section-desc">Configure default cleaning behavior</p>
+              <p className="section-desc">Configure default cleaning behavior for Smart Clean</p>
+              <div className="section-banner live">
+                <CheckCircle2 size={14} />
+                <span>Every setting in this section is genuinely wired to what the Smart Clean button does.</span>
+              </div>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Missing Values Strategy</label>
-                    <p className="setting-desc">Default method for filling missing values</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.cleaning.missingValueStrategy}
-                      onChange={(e) => updateSetting('cleaning', 'missingValueStrategy', e.target.value)}
-                    >
-                      {missingValueOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label} - {opt.description}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Missing Values Strategy"
+                  description="How Smart Clean fills missing numeric values"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <select 
+                    value={settings.cleaning.missingValueStrategy}
+                    onChange={(e) => updateSetting('cleaning', 'missingValueStrategy', e.target.value)}
+                  >
+                    {missingValueOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label} - {opt.description}</option>
+                    ))}
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Drop Column Threshold</label>
-                    <p className="setting-desc">Drop column if missing values exceed this percentage</p>
-                  </div>
-                  <div className="setting-control">
-                    <div className="slider-container">
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={settings.cleaning.dropThreshold}
-                        onChange={(e) => updateSetting('cleaning', 'dropThreshold', parseInt(e.target.value))}
-                      />
-                      <span className="slider-value">{settings.cleaning.dropThreshold}%</span>
-                    </div>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Enable Drop Threshold"
+                  description="Let Smart Clean drop columns whose missing values exceed the threshold below"
+                  status="live"
+                  statusNote="Off by default — so simply setting a threshold value never drops anything on its own"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.cleaning.enableDropThreshold ? 'active' : ''}`}
+                    onClick={() => updateSetting('cleaning', 'enableDropThreshold', !settings.cleaning.enableDropThreshold)}
+                  >
+                    {settings.cleaning.enableDropThreshold ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.cleaning.enableDropThreshold ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Auto Remove Duplicates</label>
-                    <p className="setting-desc">Automatically remove duplicate rows during cleaning</p>
+                <SettingRow
+                  label="Drop Column Threshold"
+                  description="Drop a column if its missing values exceed this percentage (only when enabled above)"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <div className="slider-container">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={settings.cleaning.dropThreshold}
+                      disabled={!settings.cleaning.enableDropThreshold}
+                      onChange={(e) => updateSetting('cleaning', 'dropThreshold', parseInt(e.target.value))}
+                    />
+                    <span className="slider-value">{settings.cleaning.dropThreshold}%</span>
                   </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.cleaning.autoRemoveDuplicates ? 'active' : ''}`}
-                      onClick={() => updateSetting('cleaning', 'autoRemoveDuplicates', !settings.cleaning.autoRemoveDuplicates)}
-                    >
-                      {settings.cleaning.autoRemoveDuplicates ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.cleaning.autoRemoveDuplicates ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Trim Spaces</label>
-                    <p className="setting-desc">Remove leading/trailing spaces from text columns</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.cleaning.trimSpaces ? 'active' : ''}`}
-                      onClick={() => updateSetting('cleaning', 'trimSpaces', !settings.cleaning.trimSpaces)}
-                    >
-                      {settings.cleaning.trimSpaces ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.cleaning.trimSpaces ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Auto Remove Duplicates"
+                  description="Let Smart Clean remove duplicate rows"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.cleaning.autoRemoveDuplicates ? 'active' : ''}`}
+                    onClick={() => updateSetting('cleaning', 'autoRemoveDuplicates', !settings.cleaning.autoRemoveDuplicates)}
+                  >
+                    {settings.cleaning.autoRemoveDuplicates ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.cleaning.autoRemoveDuplicates ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Smart Clean Profile</label>
-                    <p className="setting-desc">Choose cleaning intensity for Smart Clean button</p>
+                <SettingRow
+                  label="Trim Spaces"
+                  description="Let Smart Clean remove leading/trailing spaces from text columns"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.cleaning.trimSpaces ? 'active' : ''}`}
+                    onClick={() => updateSetting('cleaning', 'trimSpaces', !settings.cleaning.trimSpaces)}
+                  >
+                    {settings.cleaning.trimSpaces ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.cleaning.trimSpaces ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
+
+                <SettingRow
+                  label="Smart Clean Profile"
+                  description="Fast (duplicates + trim only), Balanced (standard), or Deep (also fills gaps in text/category columns)"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <div className="profile-buttons">
+                    {smartCleanProfiles.map(profile => (
+                      <button
+                        key={profile.value}
+                        className={`profile-btn ${settings.cleaning.smartCleanProfile === profile.value ? 'active' : ''}`}
+                        onClick={() => updateSetting('cleaning', 'smartCleanProfile', profile.value)}
+                      >
+                        {profile.icon}
+                        <span>{profile.label}</span>
+                        <small>{profile.description}</small>
+                      </button>
+                    ))}
                   </div>
-                  <div className="setting-control">
-                    <div className="profile-buttons">
-                      {smartCleanProfiles.map(profile => (
-                        <button
-                          key={profile.value}
-                          className={`profile-btn ${settings.cleaning.smartCleanProfile === profile.value ? 'active' : ''}`}
-                          onClick={() => updateSetting('cleaning', 'smartCleanProfile', profile.value)}
-                        >
-                          {profile.icon}
-                          <span>{profile.label}</span>
-                          <small>{profile.description}</small>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </SettingRow>
               </div>
             </div>
           )}
@@ -515,87 +564,68 @@ const SettingsPage = () => {
               <p className="section-desc">Configure chart and analysis behavior</p>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Default Chart Type</label>
-                    <p className="setting-desc">Preferred chart type for analysis</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.analysis.defaultChartType}
-                      onChange={(e) => updateSetting('analysis', 'defaultChartType', e.target.value)}
-                    >
-                      {chartTypeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Default Chart Type"
+                  description="Preferred chart type for analysis"
+                  status="pending"
+                  statusNote="The Analysis page uses a purpose-built chart type per section (histogram, donut, correlation bars) — a single global override doesn't cleanly apply to all of them"
+                  searchQuery={searchQuery}
+                >
+                  <select 
+                    value={settings.analysis.defaultChartType}
+                    onChange={(e) => updateSetting('analysis', 'defaultChartType', e.target.value)}
+                  >
+                    {chartTypeOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Enable Animations</label>
-                    <p className="setting-desc">Show animations in charts and transitions</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.analysis.enableAnimations ? 'active' : ''}`}
-                      onClick={() => updateSetting('analysis', 'enableAnimations', !settings.analysis.enableAnimations)}
-                    >
-                      {settings.analysis.enableAnimations ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.analysis.enableAnimations ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Enable Animations"
+                  description="Show animations when charts render on the Analysis page"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.analysis.enableAnimations ? 'active' : ''}`}
+                    onClick={() => updateSetting('analysis', 'enableAnimations', !settings.analysis.enableAnimations)}
+                  >
+                    {settings.analysis.enableAnimations ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.analysis.enableAnimations ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Animation Speed</label>
-                    <p className="setting-desc">How fast animations should play</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.analysis.animationSpeed}
-                      onChange={(e) => updateSetting('analysis', 'animationSpeed', e.target.value)}
-                    >
-                      {animationSpeedOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Animation Speed"
+                  description="How fast chart animations play"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <select 
+                    value={settings.analysis.animationSpeed}
+                    onChange={(e) => updateSetting('analysis', 'animationSpeed', e.target.value)}
+                  >
+                    {animationSpeedOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Show Advanced Insights</label>
-                    <p className="setting-desc">Display AI-powered insights in analysis page</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.analysis.showAdvancedInsights ? 'active' : ''}`}
-                      onClick={() => updateSetting('analysis', 'showAdvancedInsights', !settings.analysis.showAdvancedInsights)}
-                    >
-                      {settings.analysis.showAdvancedInsights ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.analysis.showAdvancedInsights ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Enable 3D Charts</label>
-                    <p className="setting-desc">Use 3D effects in charts (experimental)</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.analysis.enable3DCharts ? 'active' : ''}`}
-                      onClick={() => updateSetting('analysis', 'enable3DCharts', !settings.analysis.enable3DCharts)}
-                    >
-                      {settings.analysis.enable3DCharts ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.analysis.enable3DCharts ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Show Advanced Insights"
+                  description="Display the Smart Insights section on the Analysis page"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.analysis.showAdvancedInsights ? 'active' : ''}`}
+                    onClick={() => updateSetting('analysis', 'showAdvancedInsights', !settings.analysis.showAdvancedInsights)}
+                  >
+                    {settings.analysis.showAdvancedInsights ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.analysis.showAdvancedInsights ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
               </div>
             </div>
           )}
@@ -607,99 +637,95 @@ const SettingsPage = () => {
               <p className="section-desc">Customize the look and feel</p>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Theme</label>
-                    <p className="setting-desc">Choose your preferred visual theme</p>
+                <SettingRow
+                  label="Theme"
+                  description="Applies instantly and survives a page reload"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <div className="theme-buttons">
+                    {themeOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        className={`theme-btn ${settings.appearance.theme === opt.value ? 'active' : ''}`}
+                        onClick={() => handleThemeChange(opt.value)}
+                      >
+                        {opt.icon}
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="setting-control">
-                    <div className="theme-buttons">
-                      {themeOptions.map(opt => (
-                        <button
-                          key={opt.value}
-                          className={`theme-btn ${settings.appearance.theme === opt.value ? 'active' : ''}`}
-                          onClick={() => updateSetting('appearance', 'theme', opt.value)}
-                        >
-                          {opt.icon}
-                          <span>{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Accent Color</label>
-                    <p className="setting-desc">Primary color used throughout the app</p>
+                <SettingRow
+                  label="Accent Color"
+                  description="Applies instantly and survives a page reload, on every page"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <div className="color-picker">
+                    {accentColors.map(color => (
+                      <button
+                        key={color.value}
+                        className={`color-option ${settings.appearance.accentColor === color.value ? 'active' : ''}`}
+                        style={{ backgroundColor: color.color }}
+                        onClick={() => handleAccentChange(color.value)}
+                        title={color.label}
+                      />
+                    ))}
                   </div>
-                  <div className="setting-control">
-                    <div className="color-picker">
-                      {accentColors.map(color => (
-                        <button
-                          key={color.value}
-                          className={`color-option ${settings.appearance.accentColor === color.value ? 'active' : ''}`}
-                          style={{ backgroundColor: color.color }}
-                          onClick={() => updateSetting('appearance', 'accentColor', color.value)}
-                          title={color.label}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Font Size</label>
-                    <p className="setting-desc">Adjust text size throughout the app</p>
+                <SettingRow
+                  label="Font Size"
+                  description="Adjust text size throughout the app"
+                  status="pending"
+                  statusNote="Not applied — scaling font size app-wide safely needs a review of every page's CSS to avoid breaking layouts, which hasn't been done yet"
+                  searchQuery={searchQuery}
+                >
+                  <div className="font-size-buttons">
+                    {fontSizeOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        className={`font-btn ${settings.appearance.fontSize === opt.value ? 'active' : ''}`}
+                        onClick={() => updateSetting('appearance', 'fontSize', opt.value)}
+                      >
+                        <span style={{ fontSize: opt.size }}>Aa</span>
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="setting-control">
-                    <div className="font-size-buttons">
-                      {fontSizeOptions.map(opt => (
-                        <button
-                          key={opt.value}
-                          className={`font-btn ${settings.appearance.fontSize === opt.value ? 'active' : ''}`}
-                          onClick={() => updateSetting('appearance', 'fontSize', opt.value)}
-                        >
-                          <span style={{ fontSize: opt.size }}>Aa</span>
-                          <span>{opt.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Enable Glassmorphism</label>
-                    <p className="setting-desc">Use glass/blur effects on cards</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.appearance.enableGlassmorphism ? 'active' : ''}`}
-                      onClick={() => updateSetting('appearance', 'enableGlassmorphism', !settings.appearance.enableGlassmorphism)}
-                    >
-                      {settings.appearance.enableGlassmorphism ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.appearance.enableGlassmorphism ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Enable Glassmorphism"
+                  description="Use glass/blur effects on cards"
+                  status="pending"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.appearance.enableGlassmorphism ? 'active' : ''}`}
+                    onClick={() => updateSetting('appearance', 'enableGlassmorphism', !settings.appearance.enableGlassmorphism)}
+                  >
+                    {settings.appearance.enableGlassmorphism ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.appearance.enableGlassmorphism ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Reduce Motion</label>
-                    <p className="setting-desc">Disable animations for accessibility</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.appearance.reduceMotion ? 'active' : ''}`}
-                      onClick={() => updateSetting('appearance', 'reduceMotion', !settings.appearance.reduceMotion)}
-                    >
-                      {settings.appearance.reduceMotion ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.appearance.reduceMotion ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Reduce Motion"
+                  description="Disable animations for accessibility — applies instantly, app-wide"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.appearance.reduceMotion ? 'active' : ''}`}
+                    onClick={() => handleReduceMotionChange(!settings.appearance.reduceMotion)}
+                  >
+                    {settings.appearance.reduceMotion ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.appearance.reduceMotion ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
               </div>
             </div>
           )}
@@ -709,71 +735,73 @@ const SettingsPage = () => {
             <div className="settings-section">
               <h2>Notifications</h2>
               <p className="section-desc">Control when you receive alerts</p>
+              <div className="section-banner pending">
+                <Info size={14} />
+                <span>"Cleaning Complete Alerts" and "Show Errors" are genuinely wired. The other two below aren't connected to anything yet.</span>
+              </div>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Cleaning Complete Alerts</label>
-                    <p className="setting-desc">Show notification when cleaning finishes</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.notifications.cleaningComplete ? 'active' : ''}`}
-                      onClick={() => updateSetting('notifications', 'cleaningComplete', !settings.notifications.cleaningComplete)}
-                    >
-                      {settings.notifications.cleaningComplete ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.notifications.cleaningComplete ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Cleaning Complete Alerts"
+                  description="Show a notification when Smart Clean or Quick Clean finishes"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.notifications.cleaningComplete ? 'active' : ''}`}
+                    onClick={() => updateSetting('notifications', 'cleaningComplete', !settings.notifications.cleaningComplete)}
+                  >
+                    {settings.notifications.cleaningComplete ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.notifications.cleaningComplete ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Show Errors</label>
-                    <p className="setting-desc">Display error messages when something goes wrong</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.notifications.showErrors ? 'active' : ''}`}
-                      onClick={() => updateSetting('notifications', 'showErrors', !settings.notifications.showErrors)}
-                    >
-                      {settings.notifications.showErrors ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.notifications.showErrors ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Show Errors"
+                  description="Display error messages when something goes wrong"
+                  status="live"
+                  statusNote="Errors are still logged to the console either way"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.notifications.showErrors ? 'active' : ''}`}
+                    onClick={() => updateSetting('notifications', 'showErrors', !settings.notifications.showErrors)}
+                  >
+                    {settings.notifications.showErrors ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.notifications.showErrors ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Smart Suggestions</label>
-                    <p className="setting-desc">Show AI-powered cleaning suggestions</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.notifications.smartSuggestions ? 'active' : ''}`}
-                      onClick={() => updateSetting('notifications', 'smartSuggestions', !settings.notifications.smartSuggestions)}
-                    >
-                      {settings.notifications.smartSuggestions ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.notifications.smartSuggestions ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Smart Suggestions"
+                  description="Show AI-powered cleaning suggestions"
+                  status="pending"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.notifications.smartSuggestions ? 'active' : ''}`}
+                    onClick={() => updateSetting('notifications', 'smartSuggestions', !settings.notifications.smartSuggestions)}
+                  >
+                    {settings.notifications.smartSuggestions ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.notifications.smartSuggestions ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Sound Effects</label>
-                    <p className="setting-desc">Play sounds on important events</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.notifications.soundEnabled ? 'active' : ''}`}
-                      onClick={() => updateSetting('notifications', 'soundEnabled', !settings.notifications.soundEnabled)}
-                    >
-                      {settings.notifications.soundEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.notifications.soundEnabled ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Sound Effects"
+                  description="Play sounds on important events"
+                  status="pending"
+                  statusNote="No sound playback exists anywhere in this app yet — this toggle has nothing to control"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.notifications.soundEnabled ? 'active' : ''}`}
+                    onClick={() => updateSetting('notifications', 'soundEnabled', !settings.notifications.soundEnabled)}
+                  >
+                    {settings.notifications.soundEnabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.notifications.soundEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
               </div>
             </div>
           )}
@@ -785,72 +813,82 @@ const SettingsPage = () => {
               <p className="section-desc">Manage your data and privacy</p>
 
               <div className="settings-group">
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Auto-Delete Data After Session</label>
-                    <p className="setting-desc">Automatically delete uploaded files when you close the app</p>
-                  </div>
-                  <div className="setting-control">
-                    <button 
-                      className={`toggle-btn ${settings.privacy.autoDeleteData ? 'active' : ''}`}
-                      onClick={() => updateSetting('privacy', 'autoDeleteData', !settings.privacy.autoDeleteData)}
-                    >
-                      {settings.privacy.autoDeleteData ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                      <span>{settings.privacy.autoDeleteData ? 'Enabled' : 'Disabled'}</span>
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Auto-Delete Data After Session"
+                  description="Automatically delete uploaded files when you close the app"
+                  status="pending"
+                  statusNote="Would require a real backend feature (no such hook exists yet) — not implemented"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.privacy.autoDeleteData ? 'active' : ''}`}
+                    onClick={() => updateSetting('privacy', 'autoDeleteData', !settings.privacy.autoDeleteData)}
+                  >
+                    {settings.privacy.autoDeleteData ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.privacy.autoDeleteData ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Data Storage Location</label>
-                    <p className="setting-desc">Where your cleaning history is stored</p>
-                  </div>
-                  <div className="setting-control">
-                    <select 
-                      value={settings.privacy.dataStorageLocation}
-                      onChange={(e) => updateSetting('privacy', 'dataStorageLocation', e.target.value)}
-                    >
-                      <option value="local">Local Only (Browser)</option>
-                      <option value="server">Server (Cloud)</option>
-                    </select>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Data Storage Location"
+                  description="Where your uploaded files and cleaning history are stored"
+                  status="live"
+                  statusNote="Accurately reflects reality: this app always stores data server-side"
+                  searchQuery={searchQuery}
+                >
+                  <select value="server" disabled>
+                    <option value="server">Server (Cloud) — the only mode this app supports</option>
+                  </select>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Clear Cache</label>
-                    <p className="setting-desc">Clear temporary files and cached data</p>
-                  </div>
-                  <div className="setting-control">
-                    <button className="danger-btn" onClick={handleClearCache}>
-                      <Trash2 size={14} />
-                      Clear Cache
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Clear Cache"
+                  description="Clear temporary files and cached data"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button className="danger-btn" onClick={handleClearCache}>
+                    <Trash2 size={14} />
+                    Clear Cache
+                  </button>
+                </SettingRow>
 
-                <div className="setting-row">
-                  <div className="setting-info">
-                    <label>Export All Data</label>
-                    <p className="setting-desc">Download all your cleaning history</p>
-                  </div>
-                  <div className="setting-control">
-                    <button className="secondary-btn" onClick={handleExport}>
-                      <FileJson size={14} />
-                      Export Data
-                    </button>
-                  </div>
-                </div>
+                <SettingRow
+                  label="Export All Data"
+                  description="Download your current settings as a JSON file"
+                  status="live"
+                  searchQuery={searchQuery}
+                >
+                  <button className="secondary-btn" onClick={handleExport}>
+                    <FileJson size={14} />
+                    Export Data
+                  </button>
+                </SettingRow>
+
+                <SettingRow
+                  label="Share Anonymous Analytics"
+                  description="Help improve the app by sharing anonymous usage data"
+                  status="pending"
+                  statusNote="No analytics/telemetry system exists anywhere in this app — this toggle has nothing to control either way"
+                  searchQuery={searchQuery}
+                >
+                  <button 
+                    className={`toggle-btn ${settings.privacy.shareAnalytics ? 'active' : ''}`}
+                    onClick={() => updateSetting('privacy', 'shareAnalytics', !settings.privacy.shareAnalytics)}
+                  >
+                    {settings.privacy.shareAnalytics ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                    <span>{settings.privacy.shareAnalytics ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </SettingRow>
               </div>
             </div>
           )}
 
           {/* Save Footer */}
           <div className="settings-footer">
-            <button className="reset-footer-btn" onClick={handleReset}>
+            <button className="reset-category-btn" onClick={handleResetCategory}>
               <RotateCcw size={14} />
-              Reset to Defaults
+              Reset This Section
             </button>
             <button className={`save-footer-btn ${hasChanges ? 'active' : ''}`} onClick={handleSave} disabled={!hasChanges || isSaving}>
               {isSaving ? (

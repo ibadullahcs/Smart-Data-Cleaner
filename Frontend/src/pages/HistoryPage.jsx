@@ -1,5 +1,5 @@
 // frontend/src/pages/HistoryPage.jsx
-// COMPLETE FIXED VERSION - All issues resolved
+// Professional History Page - Timeline View
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
@@ -13,13 +13,13 @@ import {
   FileText, Copy, ExternalLink, ArrowRight, List,
   Undo, Redo, Save, FileJson, FileSpreadsheet,
   GitBranch, GitMerge, GitCommit, RotateCcw,
-  Upload, Brush, Sparkles, Activity, Scissors, Type, Hash, Mail, Phone
+  Upload, Brush, Sparkles, Activity, Scissors, Type, Hash, Mail, Phone,
+  Info, ArrowUpDown
 } from 'lucide-react';
 import { SkeletonCard } from '../components/Common/SkeletonLoader';
 import Tooltip from '../components/Common/Tooltip';
 import './HistoryPage.css';
 
-// Storage key for local history (fallback when backend not available)
 const HISTORY_STORAGE_KEY = 'smart_cleaner_history';
 
 const HistoryPage = () => {
@@ -35,6 +35,10 @@ const HistoryPage = () => {
   const [expandedActions, setExpandedActions] = useState({});
   const [showComparison, setShowComparison] = useState(false);
   const [compareData, setCompareData] = useState(null);
+  // NEW: real sort control
+  const [sortOrder, setSortOrder] = useState('newest');
+  // NEW: loading state for the now-genuine bulk delete
+  const [isClearingAll, setIsClearingAll] = useState(false);
 
   // ============ LOAD HISTORY ============
   useEffect(() => {
@@ -49,7 +53,6 @@ const HistoryPage = () => {
       
       if (jobs && jobs.length > 0) {
         const formattedSessions = jobs.map(job => {
-          // Handle cleaning_actions - ensure it's an array
           let cleaningActions = [];
           if (job.cleaning_actions) {
             if (Array.isArray(job.cleaning_actions)) {
@@ -70,8 +73,7 @@ const HistoryPage = () => {
             healthScoreAfter: job.quality_score_after || 0,
             createdAt: job.created_at,
             updatedAt: job.updated_at || job.created_at,
-            operations: cleaningActions,
-            exports: []
+            operations: cleaningActions
           };
         });
         setSessions(formattedSessions);
@@ -94,30 +96,73 @@ const HistoryPage = () => {
   };
 
   // ============ DELETE SESSION ============
+  // FIX: previously always removed the session from view and reported
+  // "Session deleted" success, even when the backend delete call
+  // genuinely failed (the error was caught and silently swallowed). A
+  // failed delete meant the session would simply reappear on the next
+  // refresh, with no indication anything went wrong. Now only updates
+  // the UI and reports success once the backend has genuinely
+  // confirmed the deletion.
   const deleteSession = async (sessionId) => {
-    if (window.confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-      try {
-        await api.deleteJob(sessionId);
-      } catch (error) {
-        console.error('Failed to delete from backend:', error);
-      }
-      
-      const updatedSessions = sessions.filter(s => s.id !== sessionId && s.jobId !== sessionId);
-      setSessions(updatedSessions);
-      if (selectedSession?.id === sessionId) {
-        setSelectedSession(null);
-      }
-      showSuccess('Session deleted');
+    if (!window.confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+      return;
     }
+    try {
+      await api.deleteJob(sessionId);
+    } catch (error) {
+      console.error('Failed to delete from backend:', error);
+      showError('Could not delete this session. Please try again.');
+      return;
+    }
+
+    setSessions(prev => prev.filter(s => s.id !== sessionId && s.jobId !== sessionId));
+    if (selectedSession?.id === sessionId) {
+      setSelectedSession(null);
+    }
+    showSuccess('Session deleted');
   };
 
   // ============ CLEAR ALL HISTORY ============
-  const clearAllHistory = () => {
-    if (window.confirm('Are you sure you want to clear ALL history? This action cannot be undone.')) {
-      setSessions([]);
+  // FIX (major): previously only cleared local React state and one
+  // localStorage cache key — it never called the backend at all. Since
+  // sessions are loaded from api.getJobs() on every page load, the
+  // "cleared" sessions would silently reappear the moment the page was
+  // refreshed or "Refresh" was clicked, directly contradicting the
+  // confirmation dialog's "cannot be undone" claim. Now genuinely
+  // deletes every session's job via the backend (one request per
+  // session, run concurrently), and reports accurately if some
+  // deletions failed rather than claiming uniform success.
+  const clearAllHistory = async () => {
+    if (sessions.length === 0) return;
+    const confirmed = window.confirm(
+      `Delete all ${sessions.length} session${sessions.length === 1 ? '' : 's'} permanently? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setIsClearingAll(true);
+    try {
+      const results = await Promise.allSettled(sessions.map(s => api.deleteJob(s.id)));
+      const succeededIds = new Set();
+      let failedCount = 0;
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          succeededIds.add(sessions[idx].id);
+        } else {
+          failedCount++;
+        }
+      });
+
+      setSessions(prev => prev.filter(s => !succeededIds.has(s.id)));
       localStorage.removeItem(HISTORY_STORAGE_KEY);
       setSelectedSession(null);
-      showSuccess('All history cleared');
+
+      if (failedCount === 0) {
+        showSuccess(`Deleted all ${succeededIds.size} session${succeededIds.size === 1 ? '' : 's'}`);
+      } else {
+        showError(`Deleted ${succeededIds.size} session(s), but ${failedCount} could not be deleted. Please try again.`);
+      }
+    } finally {
+      setIsClearingAll(false);
     }
   };
 
@@ -128,15 +173,7 @@ const HistoryPage = () => {
     showSuccess(`Loading session: ${session.fileName}`);
   };
 
-  // ============ RESTORE VERSION ============
-  const restoreVersion = (session, versionIndex) => {
-    showInfo(`Restoring version ${versionIndex + 1}...`);
-    setTimeout(() => {
-      showSuccess(`Restored to version ${versionIndex + 1}`);
-    }, 1000);
-  };
-
-  // ============ EXPORT SESSION REPORT ============
+  // ============ EXPORT SESSION REPORT (single session — already real, unchanged) ============
   const exportSessionReport = (session) => {
     const report = {
       sessionId: session.id,
@@ -146,7 +183,6 @@ const HistoryPage = () => {
       cleanedRows: session.cleanedRows,
       createdAt: session.createdAt,
       operations: session.operations,
-      exports: session.exports,
       healthScoreBefore: session.healthScoreBefore,
       healthScoreAfter: session.healthScoreAfter
     };
@@ -159,6 +195,43 @@ const HistoryPage = () => {
     a.click();
     URL.revokeObjectURL(url);
     showSuccess('Report exported');
+  };
+
+  // ============ EXPORT ALL SESSIONS REPORT (NEW — replaces the fake button) ============
+  // FIX: previously this button did nothing but fire
+  // showSuccess('Summary exported') with no file ever generated.
+  // Follows the exact same real pattern as the working per-session
+  // export above — a genuine JSON file, built from the currently
+  // filtered/sorted session list (so exporting after a search exports
+  // just what's visible, which is the more useful behavior).
+  const exportAllSessionsReport = () => {
+    if (filteredSessions.length === 0) {
+      showError('No sessions to export');
+      return;
+    }
+    const report = {
+      generatedAt: new Date().toISOString(),
+      totalSessions: filteredSessions.length,
+      sessions: filteredSessions.map(s => ({
+        sessionId: s.id,
+        fileName: s.fileName,
+        fileSize: s.fileSize,
+        originalRows: s.originalRows,
+        cleanedRows: s.cleanedRows,
+        createdAt: s.createdAt,
+        healthScoreBefore: s.healthScoreBefore,
+        healthScoreAfter: s.healthScoreAfter,
+        operations: s.operations
+      }))
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `history_summary_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showSuccess(`Exported ${filteredSessions.length} session${filteredSessions.length === 1 ? '' : 's'}`);
   };
 
   // ============ VIEW COMPARISON ============
@@ -178,20 +251,38 @@ const HistoryPage = () => {
     setShowComparison(true);
   };
 
-  // ============ FILTER SESSIONS ============
+  // ============ FILTER + SORT SESSIONS ============
+  // FIX: removed the 'exported' filter branch entirely — exports are
+  // never tracked anywhere in this app (session.exports was always a
+  // hardcoded empty array), so that filter could only ever return zero
+  // results. Keeping a filter option that can never match anything is
+  // itself a confirmed-dead UI control.
   const filteredSessions = useMemo(() => {
     if (!sessions || sessions.length === 0) return [];
     
-    return sessions.filter(session => {
+    let result = sessions.filter(session => {
       if (!session || !session.fileName) return false;
       
       const matchesSearch = session.fileName.toLowerCase().includes((searchTerm || '').toLowerCase());
       const matchesFilter = filterType === 'all' || 
-        (filterType === 'cleaned' && session.operations?.length > 0) ||
-        (filterType === 'exported' && session.exports?.length > 0);
+        (filterType === 'cleaned' && session.operations?.length > 0);
       return matchesSearch && matchesFilter;
     });
-  }, [sessions, searchTerm, filterType]);
+
+    // NEW: real sort, computed from real fields already on each session.
+    result = [...result].sort((a, b) => {
+      if (sortOrder === 'oldest') {
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      }
+      if (sortOrder === 'mostOperations') {
+        return (b.operations?.length || 0) - (a.operations?.length || 0);
+      }
+      // 'newest' (default)
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    return result;
+  }, [sessions, searchTerm, filterType, sortOrder]);
 
   // ============ GROUP SESSIONS BY DATE ============
   const groupedSessions = useMemo(() => {
@@ -228,32 +319,18 @@ const HistoryPage = () => {
   }, [filteredSessions]);
 
   // ============ GET SESSION STATS ============
+  // FIX: removed totalExports — exports are never tracked, so this
+  // was always 0 and rendered as a permanently-dead stat.
   const getSessionStats = (session) => {
     const totalOperations = session.operations?.length || 0;
-    const totalExports = session.exports?.length || 0;
     const rowsChanged = (session.originalRows || 0) - (session.cleanedRows || 0);
     const healthImprovement = (session.healthScoreAfter || 0) - (session.healthScoreBefore || 0);
     
-    return { totalOperations, totalExports, rowsChanged, healthImprovement };
+    return { totalOperations, rowsChanged, healthImprovement };
   };
 
-  // ============ TOGGLE ACTION EXPANSION ============
   const toggleAction = (actionId) => {
     setExpandedActions(prev => ({ ...prev, [actionId]: !prev[actionId] }));
-  };
-
-  // ============ GET ACTION ICON ============
-  const getActionIcon = (operation) => {
-    const op = String(operation).toLowerCase();
-    if (op.includes('trim')) return <Scissors size={14} />;
-    if (op.includes('lowercase')) return <Type size={14} />;
-    if (op.includes('uppercase')) return <Type size={14} />;
-    if (op.includes('fill')) return <Hash size={14} />;
-    if (op.includes('duplicate')) return <Copy size={14} />;
-    if (op.includes('email')) return <Mail size={14} />;
-    if (op.includes('phone')) return <Phone size={14} />;
-    if (op.includes('outlier')) return <TrendingUp size={14} />;
-    return <Brush size={14} />;
   };
 
   if (isLoading) {
@@ -287,6 +364,8 @@ const HistoryPage = () => {
     return sorted[0]?.[0] || 'None';
   };
 
+  const isFiltered = searchTerm.trim() !== '' || filterType !== 'all';
+
   return (
     <div className="history-page">
       {/* ============ HEADER ============ */}
@@ -309,10 +388,10 @@ const HistoryPage = () => {
             </button>
           </Tooltip>
           {sessions.length > 0 && (
-            <Tooltip content="Clear all history" position="bottom">
-              <button className="clear-all-btn" onClick={clearAllHistory}>
-                <Trash2 size={16} />
-                Clear All
+            <Tooltip content="Delete all sessions" position="bottom">
+              <button className="clear-all-btn" onClick={clearAllHistory} disabled={isClearingAll}>
+                {isClearingAll ? <Loader2 size={16} className="spin" /> : <Trash2 size={16} />}
+                {isClearingAll ? 'Deleting...' : 'Clear All'}
               </button>
             </Tooltip>
           )}
@@ -349,12 +428,16 @@ const HistoryPage = () => {
           >
             Cleaned
           </button>
-          <button 
-            className={`filter-btn ${filterType === 'exported' ? 'active' : ''}`}
-            onClick={() => setFilterType('exported')}
-          >
-            Exported
-          </button>
+        </div>
+
+        {/* NEW: real sort control */}
+        <div className="sort-control">
+          <ArrowUpDown size={14} />
+          <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="mostOperations">Most active</option>
+          </select>
         </div>
 
         <div className="view-toggle">
@@ -376,6 +459,13 @@ const HistoryPage = () => {
           </button>
         </div>
       </div>
+
+      {/* NEW: honest filtered-count summary, matches the pattern already used on Dashboard/Analysis */}
+      {isFiltered && (
+        <div className="history-count-summary">
+          Showing {filteredSessions.length} of {sessions.length} session{sessions.length === 1 ? '' : 's'}
+        </div>
+      )}
 
       {/* ============ ACTIVITY SUMMARY ============ */}
       {sessions.length > 0 && (
@@ -407,7 +497,7 @@ const HistoryPage = () => {
               <span className="summary-label">Last Cleaned</span>
             </div>
           </div>
-          <button className="export-summary-btn" onClick={() => showSuccess('Summary exported')}>
+          <button className="export-summary-btn" onClick={exportAllSessionsReport}>
             <Download size={14} />
             Export Report
           </button>
@@ -418,11 +508,13 @@ const HistoryPage = () => {
       {filteredSessions.length === 0 ? (
         <div className="empty-history">
           <History size={48} />
-          <h3>No History Yet</h3>
-          <p>Upload and clean files to see them here</p>
-          <button className="upload-btn" onClick={() => setCurrentPage('upload')}>
-            Go to Upload
-          </button>
+          <h3>{isFiltered ? 'No matching sessions' : 'No History Yet'}</h3>
+          <p>{isFiltered ? 'Try a different search or filter.' : 'Upload and clean files to see them here'}</p>
+          {!isFiltered && (
+            <button className="upload-btn" onClick={() => setCurrentPage('upload')}>
+              Go to Upload
+            </button>
+          )}
         </div>
       ) : viewMode === 'timeline' ? (
         <div className="timeline-container">
@@ -436,13 +528,13 @@ const HistoryPage = () => {
               <div className="timeline-items">
                 {groupedSessions.today.map(session => renderSessionCard(
                   session, selectedSession, setSelectedSession, deleteSession, 
-                  loadSession, exportSessionReport, restoreVersion, viewComparison,
+                  loadSession, exportSessionReport, viewComparison,
                   toggleAction, expandedActions, getSessionStats
                 ))}
               </div>
             </div>
           )}
-          
+
           {groupedSessions.yesterday.length > 0 && (
             <div className="timeline-group">
               <div className="timeline-group-header">
@@ -453,7 +545,7 @@ const HistoryPage = () => {
               <div className="timeline-items">
                 {groupedSessions.yesterday.map(session => renderSessionCard(
                   session, selectedSession, setSelectedSession, deleteSession, 
-                  loadSession, exportSessionReport, restoreVersion, viewComparison,
+                  loadSession, exportSessionReport, viewComparison,
                   toggleAction, expandedActions, getSessionStats
                 ))}
               </div>
@@ -470,7 +562,7 @@ const HistoryPage = () => {
               <div className="timeline-items">
                 {groupedSessions.thisWeek.map(session => renderSessionCard(
                   session, selectedSession, setSelectedSession, deleteSession, 
-                  loadSession, exportSessionReport, restoreVersion, viewComparison,
+                  loadSession, exportSessionReport, viewComparison,
                   toggleAction, expandedActions, getSessionStats
                 ))}
               </div>
@@ -487,7 +579,7 @@ const HistoryPage = () => {
               <div className="timeline-items">
                 {groupedSessions.older.map(session => renderSessionCard(
                   session, selectedSession, setSelectedSession, deleteSession, 
-                  loadSession, exportSessionReport, restoreVersion, viewComparison,
+                  loadSession, exportSessionReport, viewComparison,
                   toggleAction, expandedActions, getSessionStats
                 ))}
               </div>
@@ -498,7 +590,7 @@ const HistoryPage = () => {
         <div className="compact-container">
           {filteredSessions.map(session => renderSessionCard(
             session, selectedSession, setSelectedSession, deleteSession, 
-            loadSession, exportSessionReport, restoreVersion, viewComparison,
+            loadSession, exportSessionReport, viewComparison,
             toggleAction, expandedActions, getSessionStats
           ))}
         </div>
@@ -525,12 +617,24 @@ const HistoryPage = () => {
                     <span className="stat-value">{compareData.before.healthScore}%</span>
                   </div>
                 </div>
-                <div className="sample-data">
-                  <span className="sample-title">Sample Data:</span>
-                  {compareData.before.sampleData.map((sample, i) => (
-                    <div key={i} className="sample-item">{sample}</div>
-                  ))}
-                </div>
+                {/* FIX: previously always rendered a "Sample Data:"
+                    label with nothing beneath it, since the backend
+                    never populates sample_before/sample_after — looked
+                    broken rather than legitimately unavailable. Now
+                    states that honestly instead. */}
+                {compareData.before.sampleData.length > 0 ? (
+                  <div className="sample-data">
+                    <span className="sample-title">Sample Data:</span>
+                    {compareData.before.sampleData.map((sample, i) => (
+                      <div key={i} className="sample-item">{sample}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="sample-data-empty">
+                    <Info size={12} />
+                    <span>Sample data not recorded for this action</span>
+                  </div>
+                )}
               </div>
               <div className="comparison-arrow">
                 <ArrowRight size={24} />
@@ -547,12 +651,19 @@ const HistoryPage = () => {
                     <span className="stat-value success">{compareData.after.healthScore}%</span>
                   </div>
                 </div>
-                <div className="sample-data">
-                  <span className="sample-title">Sample Data:</span>
-                  {compareData.after.sampleData.map((sample, i) => (
-                    <div key={i} className="sample-item">{sample}</div>
-                  ))}
-                </div>
+                {compareData.after.sampleData.length > 0 ? (
+                  <div className="sample-data">
+                    <span className="sample-title">Sample Data:</span>
+                    {compareData.after.sampleData.map((sample, i) => (
+                      <div key={i} className="sample-item">{sample}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="sample-data-empty">
+                    <Info size={12} />
+                    <span>Sample data not recorded for this action</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="comparison-footer">
@@ -566,9 +677,11 @@ const HistoryPage = () => {
 };
 
 // Helper function to render session card
+// FIX: removed the restoreVersion parameter/callers entirely — see the
+// Version History section below for why.
 const renderSessionCard = (
   session, selectedSession, setSelectedSession, deleteSession, 
-  loadSession, exportSessionReport, restoreVersion, viewComparison,
+  loadSession, exportSessionReport, viewComparison,
   toggleAction, expandedActions, getSessionStats
 ) => {
   const isSelected = selectedSession?.id === session.id;
@@ -629,7 +742,7 @@ const renderSessionCard = (
       {/* Expanded Details */}
       {isSelected && (
         <div className="session-details">
-          {/* Summary Stats */}
+          {/* Summary Stats — "Exports" stat removed (always 0, dead) */}
           <div className="details-summary">
             <div className="summary-item">
               <span className="summary-label">Original Rows</span>
@@ -650,10 +763,6 @@ const renderSessionCard = (
               <span className="summary-value">{stats.totalOperations}</span>
             </div>
             <div className="summary-item">
-              <span className="summary-label">Exports</span>
-              <span className="summary-value">{stats.totalExports}</span>
-            </div>
-            <div className="summary-item">
               <span className="summary-label">Health Change</span>
               <span className={`summary-value ${stats.healthImprovement > 0 ? 'positive' : stats.healthImprovement < 0 ? 'negative' : ''}`}>
                 {stats.healthImprovement > 0 ? `+${stats.healthImprovement}%` : `${stats.healthImprovement}%`}
@@ -662,11 +771,21 @@ const renderSessionCard = (
           </div>
 
           {/* Version Timeline */}
+          {/* FIX: previously rendered a "Restore" button next to EVERY
+              operation, all of which could only ever show an "not
+              available" message when clicked (per the earlier honest-
+              messaging fix). Repeating a guaranteed-non-functional
+              control on every row reads as more broken, not less, than
+              stating the limitation once, clearly, up front. */}
           <div className="version-timeline">
             <h4>
               <GitBranch size={14} />
               Version History
             </h4>
+            <p className="version-note">
+              <Info size={11} />
+              Restoring a previous version isn't available yet — use "Export Report" below to save a snapshot of this session's details.
+            </p>
             <div className="version-list">
               <div className="version-item">
                 <div className="version-dot current" />
@@ -682,10 +801,6 @@ const renderSessionCard = (
                     <span className="version-name">{op.operation || op.action_type || 'Action'}</span>
                     <span className="version-date">{formatDate(op.timestamp || session.updatedAt, 'short')}</span>
                   </div>
-                  <button className="version-restore" onClick={() => restoreVersion(session, idx)}>
-                    <RotateCcw size={12} />
-                    Restore
-                  </button>
                 </div>
               ))}
             </div>
@@ -721,10 +836,27 @@ const renderSessionCard = (
                     </div>
                     {expandedActions[`op_${idx}`] && (
                       <div className="operation-details">
-                        <div className="detail-row">
-                          <span className="detail-label">Details:</span>
-                          <pre>{JSON.stringify(op.details || op, null, 2)}</pre>
-                        </div>
+                        {/* FIX (professional polish): previously always
+                            dumped raw JSON.stringify(op.details || op)
+                            into a <pre> block — same real data, now
+                            shown as a readable key/value list when
+                            `details` is a plain object, with an honest
+                            message when there's genuinely nothing
+                            recorded. */}
+                        {op.details && typeof op.details === 'object' && Object.keys(op.details).length > 0 ? (
+                          <div className="detail-kv-grid">
+                            {Object.entries(op.details).map(([key, value]) => (
+                              <div className="detail-kv-row" key={key}>
+                                <span className="detail-kv-key">{key.replace(/_/g, ' ')}</span>
+                                <span className="detail-kv-value">
+                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="no-details-message">No additional details recorded for this action.</p>
+                        )}
                         <div className="detail-actions">
                           <button className="detail-btn" onClick={() => viewComparison(session, op)}>
                             <Eye size={12} />
@@ -733,25 +865,6 @@ const renderSessionCard = (
                         </div>
                       </div>
                     )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Export History */}
-          {session.exports && session.exports.length > 0 && (
-            <div className="details-exports">
-              <h4>
-                <Download size={14} />
-                Export History ({session.exports.length})
-              </h4>
-              <div className="exports-list">
-                {session.exports.map((exp, idx) => (
-                  <div key={idx} className="export-item">
-                    <span className="export-format">{exp.format?.toUpperCase() || 'CSV'}</span>
-                    <span className="export-rows">{exp.rowCount || 0} rows</span>
-                    <span className="export-time">{formatDate(exp.timestamp, 'short')}</span>
                   </div>
                 ))}
               </div>
@@ -779,7 +892,6 @@ const renderSessionCard = (
   );
 };
 
-// Helper function for file size formatting
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes';
   const k = 1024;

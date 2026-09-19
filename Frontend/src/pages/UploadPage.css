@@ -77,7 +77,14 @@
   background: var(--dark-light);
 }
 
-/* Shine Effect on Hover */
+/* NEW: visible keyboard focus ring — the drop zone is now a real
+   focusable/activatable element (role="button", tabIndex=0), so it
+   needs a clear focus indicator for keyboard users. */
+.drop-zone:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
 .drop-zone::before {
   content: '';
   position: absolute;
@@ -95,14 +102,21 @@
   opacity: 1;
 }
 
-/* Dragging State */
 .drop-zone.dragging {
   border-color: var(--primary);
   background: rgba(99, 102, 241, 0.02);
   transform: scale(1.02);
 }
 
-/* File Selected State */
+/* NEW: real-time feedback while dragging an unsupported file type —
+   distinct red/error styling instead of the neutral "dragging" state,
+   so the user learns it won't work before they even drop it. */
+.drop-zone.dragging-invalid {
+  border-color: var(--error);
+  background: rgba(239, 68, 68, 0.03);
+  transform: scale(1.02);
+}
+
 .drop-zone.has-file {
   border-color: var(--success);
   border-style: solid;
@@ -285,6 +299,16 @@
   color: var(--gray);
 }
 
+/* NEW: soft, non-blocking near-size-limit warning */
+.size-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: 0.7rem;
+  color: var(--warning);
+  margin-top: var(--spacing-xs);
+}
+
 /* Upload Button */
 .upload-btn {
   display: flex;
@@ -453,7 +477,7 @@
   .drop-zone {
     padding: var(--spacing-lg);
   }
-  
+
   .file-preview {
     flex-direction: column;
     text-align: center;
@@ -464,6 +488,10 @@
   }
   
   .file-meta {
+    justify-content: center;
+  }
+
+  .size-warning {
     justify-content: center;
   }
   
@@ -497,7 +525,7 @@
   .format-hint {
     gap: var(--spacing-xs);
   }
-  
+
   .format-badge {
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: 0.65rem;

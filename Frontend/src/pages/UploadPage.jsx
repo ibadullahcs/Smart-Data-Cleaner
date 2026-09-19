@@ -1,11 +1,11 @@
 // frontend/src/pages/UploadPage.jsx
-// Professional Upload Page - Fixed duplicate notifications
+// Professional Upload Page
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { 
-  Upload, FileText, X, CheckCircle, AlertCircle, 
+  Upload, FileText, X, CheckCircle, AlertCircle, AlertTriangle,
   Sparkles, ArrowRight, Database, Zap, Shield,
   FileSpreadsheet, FileCode, Loader2
 } from 'lucide-react';
@@ -13,19 +13,26 @@ import './UploadPage.css';
 
 const UploadPage = () => {
   const { 
-    setCurrentPage, setJobId, setUploadData, setProfileData,
+    setCurrentPage, setJobId,
     setTotalRows, setTotalColumns, setQualityScore,
     setColumnProfile, setPreviewData, setFilename,
-    setFileSize, showSuccess, showError, setIsLoading
+    setFileSize, showSuccess, showError, setIsLoading,
+    // NEW (real wiring): reads the unified settings object so the
+    // "Default Page After Upload" setting genuinely controls where
+    // the user lands, instead of the previous hardcoded 'dashboard'.
+    settings
   } = useApp();
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDragInvalid, setIsDragInvalid] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState('idle'); // idle, uploading, profiling, complete
+  const [uploadStatus, setUploadStatus] = useState('idle');
+
+  const fileInputRef = useRef(null);
 
   const supportedFormats = [
     { ext: '.csv', name: 'CSV', icon: <FileCode size={14} />, color: '#10b981' },
@@ -34,8 +41,9 @@ const UploadPage = () => {
   ];
 
   const maxSizeMB = 100;
+  const SAMPLE_READ_BYTES = 1024 * 100;
+  const WARN_SIZE_MB = maxSizeMB * 0.8;
 
-  // Simple file validation (no external dependency)
   const validateFileSize = (file) => {
     const maxSizeBytes = maxSizeMB * 1024 * 1024;
     if (file.size > maxSizeBytes) {
@@ -54,31 +62,43 @@ const UploadPage = () => {
 
   const parseFileInfo = async (file) => {
     return new Promise((resolve) => {
-      // For large files, don't try to read the entire content
       let rowCount = '...';
-      
-      if (file.name.endsWith('.csv') && file.size < 5 * 1024 * 1024) {
-        // Only read first few KB for small files
+      let isEstimate = false;
+
+      if (file.name.endsWith('.csv')) {
         const reader = new FileReader();
         reader.onload = (e) => {
           const content = e.target.result;
           const lines = content.split('\n');
-          rowCount = lines.length - 1;
+          const linesRead = Math.max(0, lines.length - 1);
+          const bytesRead = Math.min(file.size, SAMPLE_READ_BYTES);
+
+          if (file.size <= SAMPLE_READ_BYTES) {
+            rowCount = linesRead;
+            isEstimate = false;
+          } else {
+            const bytesPerLine = bytesRead / Math.max(linesRead, 1);
+            rowCount = Math.round(file.size / Math.max(bytesPerLine, 1));
+            isEstimate = true;
+          }
+
           resolve({
             name: file.name,
             size: file.size,
             type: file.name.split('.').pop().toUpperCase(),
             rowCount: rowCount > 0 ? rowCount.toLocaleString() : '...',
+            rowCountIsEstimate: isEstimate,
             lastModified: new Date(file.lastModified).toLocaleDateString()
           });
         };
-        reader.readAsText(file.slice(0, 1024 * 100)); // Read first 100KB only
+        reader.readAsText(file.slice(0, SAMPLE_READ_BYTES));
       } else {
         resolve({
           name: file.name,
           size: file.size,
           type: file.name.split('.').pop().toUpperCase(),
           rowCount: '...',
+          rowCountIsEstimate: false,
           lastModified: new Date(file.lastModified).toLocaleDateString()
         });
       }
@@ -88,7 +108,6 @@ const UploadPage = () => {
   const handleFileSelect = async (file) => {
     setError(null);
     
-    // Validate file type
     const typeValidation = validateFileType(file);
     if (!typeValidation.isValid) {
       setError(typeValidation.error);
@@ -97,7 +116,6 @@ const UploadPage = () => {
       return;
     }
     
-    // Validate file size
     const sizeValidation = validateFileSize(file);
     if (!sizeValidation.isValid) {
       setError(sizeValidation.error);
@@ -114,9 +132,20 @@ const UploadPage = () => {
     setFileInfo(info);
   };
 
+  const looksLikeUnsupportedDrag = (e) => {
+    const items = e.dataTransfer?.items;
+    if (!items || items.length === 0) return false;
+    const item = items[0];
+    if (item.kind !== 'file') return true;
+    if (!item.type) return false;
+    const validMimeHints = ['csv', 'excel', 'spreadsheet', 'text/plain'];
+    return !validMimeHints.some(hint => item.type.toLowerCase().includes(hint));
+  };
+
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
+    setIsDragInvalid(false);
     
     const file = e.dataTransfer.files[0];
     if (file) {
@@ -127,15 +156,25 @@ const UploadPage = () => {
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     setIsDragging(true);
+    setIsDragInvalid(looksLikeUnsupportedDrag(e));
   }, []);
 
   const handleDragLeave = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
+    setIsDragInvalid(false);
   }, []);
 
   const handleBrowse = () => {
-    document.getElementById('file-input').click();
+    fileInputRef.current?.click();
+  };
+
+  const handleDropZoneKeyDown = (e) => {
+    if (selectedFile) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleBrowse();
+    }
   };
 
   const handleFileInput = (e) => {
@@ -151,11 +190,14 @@ const UploadPage = () => {
     setError(null);
     setUploadProgress(0);
     setUploadStatus('idle');
-    document.getElementById('file-input').value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleUpload = async () => {
     if (!selectedFile) return;
+    if (isUploading) return;
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -166,28 +208,21 @@ const UploadPage = () => {
     try {
       console.log('📤 Starting upload for:', selectedFile.name);
       
-      // Step 1: Upload file to backend
       const uploadResult = await api.uploadFile(selectedFile, (progress) => {
         console.log(`📊 Upload progress: ${progress}%`);
         setUploadProgress(progress);
       });
 
       console.log('✅ Upload successful:', uploadResult);
-      setJobId(uploadResult.job_id);
-      setUploadData(uploadResult);
-      setUploadStatus('profiling');
-      
-      // ONLY ONE SUCCESS NOTIFICATION FOR UPLOAD
-      // Removed duplicate showSuccess here - will show only after profiling
 
-      // Step 2: Get data profile
+      setJobId(uploadResult.job_id);
+      setUploadStatus('profiling');
+
       console.log('📊 Fetching profile for job:', uploadResult.job_id);
       const profileResult = await api.profileData(uploadResult.job_id);
       
       console.log('✅ Profile received:', profileResult);
       
-      // Step 3: Store profile data in context
-      setProfileData(profileResult);
       setTotalRows(profileResult.total_rows);
       setTotalColumns(profileResult.total_columns);
       setQualityScore(profileResult.quality_score);
@@ -201,14 +236,17 @@ const UploadPage = () => {
         preview: profileResult.preview_data?.length
       });
 
-      // SINGLE SUCCESS NOTIFICATION - Only one message
       showSuccess(`"${selectedFile.name}" uploaded successfully! ${profileResult.total_rows.toLocaleString()} rows loaded.`);
 
-      // Step 4: Navigate to dashboard after short delay
       setTimeout(() => {
         setIsUploading(false);
         setIsLoading(false);
-        setCurrentPage('dashboard');
+        // FIX (real wiring): previously always hardcoded to 'dashboard'
+        // regardless of the "Default Page After Upload" setting, which
+        // existed on the Settings page but was never actually read
+        // anywhere. Falls back to 'dashboard' if the setting is
+        // somehow missing, matching the prior behavior exactly.
+        setCurrentPage(settings?.general?.defaultPage || 'dashboard');
       }, 800);
 
     } catch (err) {
@@ -230,10 +268,12 @@ const UploadPage = () => {
     return <FileText size={48} />;
   };
 
+  const fileSizeMB = fileInfo ? fileInfo.size / 1024 / 1024 : 0;
+  const showSizeWarning = fileInfo && fileSizeMB >= WARN_SIZE_MB && fileSizeMB <= maxSizeMB;
+
   return (
     <div className="upload-page">
       <div className="upload-container">
-        {/* Hero Section */}
         <div className="upload-hero">
           <div className="hero-badge">
             <Sparkles size={14} />
@@ -243,14 +283,18 @@ const UploadPage = () => {
           <p>Start cleaning your data in seconds. We support CSV and Excel formats.</p>
         </div>
 
-        {/* Drop Zone */}
         <div
-          className={`drop-zone ${isDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+          className={`drop-zone ${isDragging ? 'dragging' : ''} ${isDragInvalid ? 'dragging-invalid' : ''} ${selectedFile ? 'has-file' : ''}`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
+          role={!selectedFile ? 'button' : undefined}
+          tabIndex={!selectedFile ? 0 : undefined}
+          onKeyDown={handleDropZoneKeyDown}
+          aria-label={!selectedFile ? 'Upload a CSV or Excel file' : undefined}
         >
           <input
+            ref={fileInputRef}
             type="file"
             id="file-input"
             accept=".csv,.xlsx,.xls"
@@ -265,7 +309,9 @@ const UploadPage = () => {
                   {getFileIcon()}
                 </div>
               </div>
-              <h3>Drag & drop your file here</h3>
+              <h3>
+                {isDragInvalid ? 'This file type isn\'t supported' : isDragging ? 'Drop your file here' : 'Drag & drop your file here'}
+              </h3>
               <p>or</p>
               <button className="browse-btn" onClick={handleBrowse}>
                 Browse Files
@@ -304,10 +350,16 @@ const UploadPage = () => {
                   {fileInfo?.rowCount && fileInfo.rowCount !== '...' && (
                     <span className="meta-badge">
                       <Zap size={12} />
-                      {fileInfo.rowCount} rows (est.)
+                      {fileInfo.rowCount} rows{fileInfo.rowCountIsEstimate ? ' (est.)' : ''}
                     </span>
                   )}
                 </div>
+                {showSizeWarning && (
+                  <div className="size-warning">
+                    <AlertTriangle size={12} />
+                    <span>This file is close to the {maxSizeMB}MB limit — upload may take longer than usual.</span>
+                  </div>
+                )}
               </div>
               
               {isUploading ? (
@@ -344,7 +396,6 @@ const UploadPage = () => {
           )}
         </div>
 
-        {/* Error Display */}
         {error && (
           <div className="error-message">
             <AlertCircle size={18} />
@@ -352,7 +403,6 @@ const UploadPage = () => {
           </div>
         )}
 
-        {/* Features Section */}
         <div className="upload-features">
           <div className="feature-item">
             <Shield size={16} />

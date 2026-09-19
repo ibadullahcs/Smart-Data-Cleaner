@@ -17,9 +17,14 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
   const [error, setError] = useState(null)
+  // NEW: tracks whether Supabase just fired a PASSWORD_RECOVERY event
+  // (the user arrived via a password-reset email link). App.jsx needs
+  // this to know to show the "set new password" screen instead of the
+  // normal logged-in app, since Supabase signs the user into a
+  // temporary recovery session automatically.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
 
   useEffect(() => {
-    // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
@@ -36,9 +41,11 @@ export const AuthProvider = ({ children }) => {
 
     getInitialSession()
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('Auth state changed:', _event, session?.user?.email)
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true)
+      }
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
@@ -47,7 +54,6 @@ export const AuthProvider = ({ children }) => {
     return () => subscription.unsubscribe()
   }, [])
 
-  // Sign up with email
   const signUp = async (email, password, fullName) => {
     setError(null)
     try {
@@ -71,7 +77,6 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Sign in with email
   const signIn = async (email, password) => {
     setError(null)
     try {
@@ -89,14 +94,21 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Sign in with Google
   const signInWithGoogle = async () => {
     setError(null)
     try {
+      // FIX: previously redirected to `${origin}/dashboard`, a route
+      // that doesn't exist anywhere in this app — pages here are
+      // switched by AppContext's `currentPage` state, not by URL path,
+      // so nothing was set up to serve or interpret that path. Now
+      // redirects to the plain origin, which the app already boots
+      // correctly at; the auth listener above picks up the resulting
+      // session regardless of which "page" state happens to be active
+      // when it fires.
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: window.location.origin
         }
       })
       if (error) throw error
@@ -109,7 +121,6 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Sign out
   const signOut = async () => {
     setError(null)
     try {
@@ -123,12 +134,17 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Reset password
   const resetPassword = async (email) => {
     setError(null)
     try {
+      // FIX: same root issue as Google OAuth above — `/reset-password`
+      // was never a route this app could serve or recognize. Now
+      // redirects to the origin; App.jsx (once wired) detects the
+      // PASSWORD_RECOVERY auth event via `isPasswordRecovery` above and
+      // shows the new ResetPassword page/state instead of a path-based
+      // route.
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`
+        redirectTo: window.location.origin
       })
       if (error) throw error
       return data
@@ -139,16 +155,41 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  // NEW: completes the password-reset flow — called from the new
+  // ResetPassword page once the user submits their new password while
+  // in a PASSWORD_RECOVERY session.
+  const updatePassword = async (newPassword) => {
+    setError(null)
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      setIsPasswordRecovery(false)
+      return data
+    } catch (err) {
+      console.error('Update password error:', err)
+      setError(err.message)
+      throw err
+    }
+  }
+
+  // NEW: lets a page/App.jsx clear the recovery flag once the flow is
+  // done (e.g. after successfully updating the password, or if the
+  // user navigates away).
+  const clearPasswordRecovery = () => setIsPasswordRecovery(false)
+
   const value = {
     user,
     session,
     loading,
     error,
+    isPasswordRecovery,
     signUp,
     signIn,
     signInWithGoogle,
     signOut,
-    resetPassword
+    resetPassword,
+    updatePassword,
+    clearPasswordRecovery
   }
 
   return (

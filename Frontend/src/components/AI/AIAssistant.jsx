@@ -1,4 +1,4 @@
-// frontend/src/components/AI/AIAssistant.jsx
+//frontend/src/components/AI/AIAssistant.jsx
 // Complete AI Chatbot - Real Conversational Experience
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -97,8 +97,7 @@ const COMMANDS = {
     description: 'Calculate age from birth date',
     requiresColumn: true,
     action: 'calculate_age'
-  },
-  remove_outliers: {
+  }, remove_outliers: {
     keywords: ['remove outliers', 'delete outliers', 'clean outliers'],
     description: 'Remove statistical outliers',
     requiresColumn: true,
@@ -130,6 +129,23 @@ const COMMANDS = {
   }
 };
 
+// FIX (XSS): escapes raw text before the markdown-lite (**bold**, \n,
+// bullet) transforms are applied in renderMessage. Previously,
+// dynamic content (result.message / error.message from backend
+// responses) was interpolated directly into an HTML string with no
+// escaping at all, then rendered via dangerouslySetInnerHTML. This
+// neutralizes any HTML/script content while leaving all the existing
+// static help text's visual appearance completely unchanged (entities
+// like &#039; render back as ' in the browser).
+const escapeHtml = (str) => {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 const AIAssistant = ({ 
   isOpen, 
   onClose, 
@@ -147,6 +163,13 @@ const AIAssistant = ({
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
+  // FIX (stale closure): always holds the MOST RECENT handleSend
+  // closure. The voice-recognition effect below only runs once on
+  // mount, so calling handleSend directly from its onresult callback
+  // would permanently use mount-time state (empty inputValue, initial
+  // messages/awaitingColumn, etc.) — this ref sidesteps that by being
+  // updated after every render.
+  const handleSendRef = useRef(null);
 
   // Initialize chat
   useEffect(() => {
@@ -160,12 +183,12 @@ const AIAssistant = ({
 I can help you clean your data using natural language.
 
 **✨ Try these commands:**
-• "Smart clean" - Clean everything automatically
-• "Remove duplicates" - Delete duplicate rows
-• "Trim spaces in age column"
-• "Lowercase all text columns"
-• "Fix emails" - Validate email addresses
-• "Format phones" - Standardize phone numbers
+- "Smart clean" - Clean everything automatically
+- "Remove duplicates" - Delete duplicate rows
+- "Trim spaces in age column"
+- "Lowercase all text columns"
+- "Fix emails" - Validate email addresses
+- "Format phones" - Standardize phone numbers
 
 **📝 Just type what you want to do!**`,
           timestamp: new Date()
@@ -199,9 +222,17 @@ I can help you clean your data using natural language.
         const transcript = event.results[0][0].transcript;
         setInputValue(transcript);
         setIsListening(false);
-        setTimeout(() => handleSend(), 100);
+        // FIX (stale closure): call the ALWAYS-CURRENT handleSend via
+        // the ref, and pass the transcript directly as an override
+        // rather than relying on setInputValue having landed in state
+        // by the time this timeout fires. Previously this called the
+        // mount-time `handleSend` closure directly, which read
+        // inputValue as it was at mount ('') — so
+        // `if (!inputValue.trim()) return;` fired immediately and
+        // every voice command silently did nothing.
+        setTimeout(() => handleSendRef.current && handleSendRef.current(transcript), 100);
       };
-      
+
       recognitionRef.current.onerror = () => {
         setIsListening(false);
         addMessage('assistant', "⚠️ Sorry, I couldn't hear you. Please type your command.", false);
@@ -248,7 +279,26 @@ I can help you clean your data using natural language.
     if (lowerText.includes('all columns') || lowerText.includes('every column')) {
       column = 'all';
     }
-    
+
+    // FIX (case-sensitivity bug): `column` extracted above is always
+    // lowercase (it comes from matching against `lowerText`), but
+    // `availableColumns` holds the REAL column names with their
+    // actual casing (e.g. "Age", "Email"). Every downstream check
+    // (`availableColumns.includes(column)`) was a case-sensitive exact
+    // match against a lowercase string, so naming any column with an
+    // uppercase letter — extremely common — always failed to match,
+    // even though the column genuinely exists. Resolving to the real
+    // casing here fixes every command that names a column, not just
+    // one code path.
+    if (column && column !== 'all') {
+      const realCased = availableColumns.find(
+        c => c.toLowerCase() === column.toLowerCase()
+      );
+      if (realCased) {
+        column = realCased;
+      }
+    }
+
     // Find matching command
     for (const [cmdKey, cmdInfo] of Object.entries(COMMANDS)) {
       for (const keyword of cmdInfo.keywords) {
@@ -261,10 +311,18 @@ I can help you clean your data using natural language.
     return { command: null, column: null, requiresColumn: false };
   };
 
-  const handleSend = async () => {
-    if (!inputValue.trim()) return;
+  // FIX (stale closure, part 2): handleSend now accepts an optional
+  // `overrideText` so callers (specifically the voice-input path) can
+  // pass text directly instead of depending on `inputValue` state
+  // having updated in time. Direct callers (Send button, quick
+  // command buttons, Enter key) still call handleSend() with no
+  // argument and correctly use the live `inputValue` from the current
+  // render's closure, exactly as before.
+  const handleSend = async (overrideText) => {
+    const textToSend = (typeof overrideText === 'string' ? overrideText : inputValue).trim();
+    if (!textToSend) return;
 
-    const userMessage = inputValue.trim();
+    const userMessage = textToSend;
     setInputValue('');
     addMessage('user', userMessage, false);
     
@@ -281,32 +339,32 @@ I can help you clean your data using natural language.
       const helpText = `**📋 Available Commands**
 
 **🧹 Basic Cleaning**
-• "Smart clean" - Complete dataset cleaning
-• "Quick clean" - Remove duplicates + trim spaces
-• "Remove duplicates" - Delete duplicate rows
+- "Smart clean" - Complete dataset cleaning
+- "Quick clean" - Remove duplicates + trim spaces
+- "Remove duplicates" - Delete duplicate rows
 
 **📝 Text Operations**
-• "Trim spaces in [column]"
-• "Lowercase [column]"
-• "Uppercase [column]"
-• "Title case [column]"
+- "Trim spaces in [column]"
+- "Lowercase [column]"
+- "Uppercase [column]"
+- "Title case [column]"
 
 **📊 Missing Values**
-• "Fill with mean in [column]"
-• "Fill with median in [column]"
-• "Fill with mode in [column]"
+- "Fill with mean in [column]"
+- "Fill with median in [column]"
+- "Fill with mode in [column]"
 
 **📧 Special Actions**
-• "Fix emails" - Validate email addresses
-• "Format phones" - Standardize phone numbers
-• "Extract year from [date column]"
-• "Calculate age from [birth column]"
-• "Remove outliers from [column]"
-• "Convert [column] to number"
-• "Convert [column] to date"
+- "Fix emails" - Validate email addresses
+- "Format phones" - Standardize phone numbers
+- "Extract year from [date column]"
+- "Calculate age from [birth column]"
+- "Remove outliers from [column]"
+- "Convert [column] to number"
+- "Convert [column] to date"
 
 **🔄 Other**
-• "Undo" - Undo last action
+- "Undo" - Undo last action
 
 Just type what you want to do naturally!`;
       
@@ -369,6 +427,14 @@ Just type what you want to do naturally!`;
     setAwaitingColumn(null);
   };
 
+  // FIX (stale closure, part 3): keeps handleSendRef pointing at the
+  // freshest handleSend closure after every render, so the voice
+  // recognition effect (which only runs once, see above) always
+  // invokes an up-to-date version.
+  useEffect(() => {
+    handleSendRef.current = handleSend;
+  });
+
   const handleVoiceInput = () => {
     if (recognitionRef.current && !isListening) {
       setIsListening(true);
@@ -396,12 +462,18 @@ Just type what you want to do naturally!`;
     
     let content = msg.content;
     if (msg.isHTML) {
-      content = msg.content
+      // FIX (XSS): escape the raw text FIRST, then apply the
+      // markdown-lite transforms on the escaped result. Previously
+      // msg.content (which can include interpolated backend
+      // result.message/error.message text) was fed straight into
+      // dangerouslySetInnerHTML with only the markdown replacements
+      // applied — no escaping at all.
+      content = escapeHtml(msg.content)
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\n/g, '<br/>')
         .replace(/•/g, '<span class="bullet">•</span>');
     }
-    
+
     return (
       <div className={`chat-message ${msg.role}`}>
         <div className="message-avatar">

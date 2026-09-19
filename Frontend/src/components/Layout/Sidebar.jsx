@@ -13,7 +13,12 @@ import { useAuth } from '../../context/AuthContext';
 import './Sidebar.css';
 
 const Sidebar = ({ collapsed, onToggle }) => {
-  const { currentPage, setCurrentPage, jobId, totalRows, totalColumns, qualityScore } = useApp();
+  const {
+    currentPage, setCurrentPage, jobId, totalRows, totalColumns, qualityScore,
+    // FIX (logout state leak): clearData already existed in
+    // AppContext but was never called from this logout path either.
+    clearData
+  } = useApp();
   const { signOut } = useAuth();
   const [hoveredItem, setHoveredItem] = useState(null);
 
@@ -35,6 +40,9 @@ const Sidebar = ({ collapsed, onToggle }) => {
 
   const handleLogout = async () => {
     await signOut();
+    // FIX: see Navbar.jsx handleLogout for the same fix and rationale
+    // — previously left dataset state in AppContext after logout.
+    clearData();
     setCurrentPage('login');
   };
 

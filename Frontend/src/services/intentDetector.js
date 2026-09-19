@@ -1,5 +1,13 @@
 // frontend/src/services/intentDetector.js
 // Advanced AI Intent Detection - Natural Language Processing
+//
+// NOTE: this module is confirmed NOT imported by AIAssistant.jsx (or
+// anything else live in this app) — AIAssistant.jsx has its own
+// independent, working command parser. This file is dead code as far
+// as the running application is concerned. Fixed for correctness below
+// since it's still real code that could confuse anyone reading it, but
+// recommend deciding whether to delete it outright, given it's fully
+// superseded.
 
 // ============================================
 // INTENT TYPES
@@ -57,7 +65,6 @@ export const INTENTS = {
   // Outliers
   REMOVE_OUTLIERS: 'remove_outliers',
   CAP_OUTLIERS: 'cap_outliers',
-  
   // Global Actions
   SMART_CLEAN: 'smart_clean',
   QUICK_CLEAN: 'quick_clean',
@@ -296,7 +303,6 @@ export const detectIntent = (text) => {
   const customValue = extractCustomValue(lowerText);
   const threshold = extractThreshold(lowerText);
   
-  // Check for "all columns" special case
   let target = column;
   if (lowerText.includes('all columns') || lowerText.includes('every column')) {
     target = 'all';
@@ -317,6 +323,26 @@ export const detectIntent = (text) => {
 // ============================================
 // RESPONSE GENERATION
 // ============================================
+
+// FIX: previously `responses[intent] || responses[INTENTS.SHOW_HELP]`
+// silently substituted the ENTIRE generic help menu whenever a
+// correctly-detected intent (20 of 38, by count) had no dedicated
+// entry in `responses` — e.g. a user typing "fill with median in age"
+// would be correctly recognized as FILL_MEDIAN, then shown the full
+// command list as if they'd typed "help", with zero acknowledgment of
+// what was actually understood. This is the same class of bug fixed
+// in AIAssistant.jsx (there, 5 specific commands; here, systemically
+// more of them). Rather than inventing 20 unverified confirmation
+// messages (real design work this dead file doesn't warrant right
+// now), this at least stops the misleading silent substitution — an
+// intent that's genuinely recognized but not yet wired to a specific
+// response now says so honestly, instead of pretending to be a help
+// request.
+const genericRecognizedFallback = (intentResult) => ({
+  message: `I understood you want to "${intentResult.matchedKeyword}", but this specific action isn't fully wired up yet in this assistant. Type "help" to see the commands that are fully supported.`,
+  requiresConfirmation: false,
+  suggestedAction: null
+});
 
 export const generateResponse = (intentResult) => {
   const { intent, column, method, customValue, threshold } = intentResult;
@@ -388,40 +414,49 @@ export const generateResponse = (intentResult) => {
       suggestedAction: 'undo'
     },
     [INTENTS.SHOW_HELP]: {
-      message: `**📋 Available Commands**
+      message:  `**📋 Available Commands**
 
 **🧹 Basic Cleaning**
-• "Smart clean" - Complete dataset cleaning
-• "Quick clean" - Remove duplicates + trim spaces
-• "Remove duplicates" - Delete duplicate rows
+- "Smart clean" - Complete dataset cleaning
+- "Quick clean" - Remove duplicates + trim spaces
+- "Remove duplicates" - Delete duplicate rows
 
 **📝 Text Operations**
-• "Trim spaces in [column]"
-• "Lowercase [column]" 
-• "Uppercase [column]"
-• "Title case [column]"
+- "Trim spaces in [column]"
+- "Lowercase [column]" 
+- "Uppercase [column]"
+- "Title case [column]"
 
 **📊 Missing Values**
-• "Fill with mean in [column]"
-• "Fill with median in [column]"
-• "Fill with mode in [column]"
+- "Fill with mean in [column]"
+- "Fill with median in [column]"
+- "Fill with mode in [column]"
 
 **📧 Special Actions**
-• "Fix emails" - Validate email addresses
-• "Format phones" - Standardize phone numbers
-• "Extract year from [date column]"
-• "Calculate age from [birth column]"
+- "Fix emails" - Validate email addresses
+- "Format phones" - Standardize phone numbers
+- "Extract year from [date column]"
+- "Calculate age from [birth column]"
 
 **🔄 Other**
-• "Undo" - Undo last action
+- "Undo" - Undo last action
 
 Just type what you want to do naturally!`,
       requiresConfirmation: false,
       suggestedAction: null
     }
   };
-  
-  return responses[intent] || responses[INTENTS.SHOW_HELP];
+
+  if (responses[intent]) {
+    return responses[intent];
+  }
+  // Genuinely unrecognized input still gets the real help menu.
+  if (!intent || intent === INTENTS.SHOW_HELP) {
+    return responses[INTENTS.SHOW_HELP];
+  }
+  // A real intent WAS recognized, it just has no dedicated response
+  // template yet — say so honestly instead of silently showing help.
+  return genericRecognizedFallback(intentResult);
 };
 
 // ============================================
@@ -482,16 +517,31 @@ export const getQuickCommands = () => {
 // VALIDATION
 // ============================================
 
+// FIX (case-sensitivity bug, same class as the one fixed in
+// AIAssistant.jsx): `params.column` comes from extractColumn(), which
+// always operates on lowercased text, so it's always lowercase — but
+// `availableColumns` holds the real column names with their actual
+// casing (e.g. "Age", "Email"). The previous exact-match `!includes()`
+// check meant ANY column name containing an uppercase letter would
+// incorrectly report "not found" even when it genuinely exists. Now
+// resolves case-insensitively AND corrects action.params.column to the
+// real-cased value in place, so any downstream code that goes on to
+// call an API with this column name uses the name that actually
+// exists in the dataset.
 export const validateAction = (action, availableColumns = []) => {
-  const { action: actionType, params } = action;
+  const { params } = action;
   
   if (params.column && params.column !== 'all' && availableColumns.length > 0) {
-    if (!availableColumns.includes(params.column)) {
+    const realCased = availableColumns.find(
+      c => c.toLowerCase() === params.column.toLowerCase()
+    );
+    if (!realCased) {
       return {
         valid: false,
         errorMessage: `Column "${params.column}" not found. Available columns: ${availableColumns.join(', ')}`
       };
     }
+    params.column = realCased;
   }
   
   return { valid: true, errorMessage: null };

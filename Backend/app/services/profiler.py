@@ -34,15 +34,30 @@ class DataProfiler:
         # Calculate quality score
         quality_score = max(0, 100 - int((total_missing / total_cells) * 100)) if total_cells > 0 else 0
         
-        # Preview data (INCREASED LIMIT TO 500 for better pagination)
-        preview_data = self._prepare_preview(df, limit=500)
-        
+        # FIX (CRITICAL): previously hardcoded limit=500 — meant a
+        # 700, 800, or 1000-row file was ALWAYS silently cut down to
+        # its first 500 rows in the table, no matter how large the
+        # actual file was. Every cleaning operation itself reads and
+        # writes the FULL file correctly — only the preview shown in
+        # the browser table was ever truncated. Raised to a genuinely
+        # safe browser-rendering limit (5,000 rows — rendering more
+        # than this in a plain HTML table starts to genuinely hurt
+        # browser performance regardless of framework), AND the
+        # response now honestly reports whether truncation happened,
+        # instead of silently pretending the shown rows are the whole
+        # dataset.
+        PREVIEW_ROW_LIMIT = 5000
+        preview_data = self._prepare_preview(df, limit=PREVIEW_ROW_LIMIT)
+        preview_truncated = total_rows > PREVIEW_ROW_LIMIT
+
         return {
             "total_rows": total_rows,
             "total_columns": total_columns,
             "quality_score": quality_score,
             "columns": columns,
             "preview_data": preview_data,
+            "preview_truncated": preview_truncated,
+            "preview_rows_shown": len(preview_data),
             "filename": filename,
             "profiled_at": datetime.now().isoformat()
         }
@@ -74,12 +89,12 @@ class DataProfiler:
         }
         
         # Numeric analysis
-        if detected_type in ['NUMERIC', 'CURRENCY', 'AGE', 'INTEGER'] or pd.api.types.is_numeric_dtype(series):
+        if detected_type in ['NUMERIC', 'CURRENCY', 'AGE'] or pd.api.types.is_numeric_dtype(series):
             numeric_stats = self._get_numeric_stats(series)
             profile.update(numeric_stats)
         
         # Categorical analysis
-        if detected_type in ['CATEGORICAL', 'GENDER', 'CITY', 'PROVINCE', 'STATUS']:
+        if detected_type in ['CATEGORICAL', 'GENDER', 'CITY', 'PROVINCE']:
             categorical_stats = self._get_categorical_stats(series)
             profile.update(categorical_stats)
         
@@ -93,7 +108,6 @@ class DataProfiler:
         non_null = series.dropna()
         if len(non_null) == 0:
             return []
-        
         samples = non_null.head(limit).tolist()
         # Fix encoding issues in samples
         return [self.encoding_detector.fix_mojibake(str(v)) if isinstance(v, str) else v for v in samples]
@@ -140,7 +154,6 @@ class DataProfiler:
         """Detect data quality issues"""
         issues = []
         suggestions = []
-        
         null_count = profile.get('null_count', 0)
         null_percent = profile.get('null_percent', 0)
         
@@ -169,7 +182,7 @@ class DataProfiler:
         # Type-specific issues
         if detected_type == 'EMAIL':
             email_pattern = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
-            invalid_emails = int(series[~series.astype(str).str.match(email_pattern, na=False)].count())
+            invalid_emails = int((~series.astype(str).str.match(email_pattern, na=False)).sum())
             if invalid_emails > 0:
                 issues.append({
                     "type": "invalid_email",
@@ -181,7 +194,7 @@ class DataProfiler:
         
         elif detected_type == 'PHONE':
             digits_only = series.astype(str).str.replace(r'\D', '', regex=True)
-            invalid_phones = int(digits_only.str.len().between(10, 15).eq(False).sum())
+            invalid_phones = int((~digits_only.str.len().between(10, 15)).sum())
             if invalid_phones > 0:
                 issues.append({
                     "type": "invalid_phone",
@@ -193,7 +206,7 @@ class DataProfiler:
         
         elif detected_type == 'AGE':
             numeric_series = pd.to_numeric(series, errors='coerce')
-            invalid_ages = int(numeric_series[(numeric_series < 0) | (numeric_series > 120)].count())
+            invalid_ages = int(((numeric_series < 0) | (numeric_series > 120)).sum())
             if invalid_ages > 0:
                 issues.append({
                     "type": "invalid_age",
@@ -202,12 +215,50 @@ class DataProfiler:
                     "severity": "high"
                 })
                 suggestions.append(f"Fix {invalid_ages} age values")
+
+        elif detected_type == 'GENDER':
+            known_values = {
+                'male', 'female', 'm', 'f', 'other', 'non-binary', 'nonbinary',
+                'prefer not to say', 'unknown', 'transgender', 'nb'
+            }
+            normalized = series.dropna().astype(str).str.strip().str.lower()
+            if len(normalized) > 0:
+                invalid_gender = int((~normalized.isin(known_values)).sum())
+                if invalid_gender > 0:
+                    issues.append({
+                        "type": "invalid_gender",
+                        "message": f"{invalid_gender} values don't match common gender categories",
+                        "count": invalid_gender,
+                        "severity": "low"
+                    })
+                    suggestions.append(f"Review {invalid_gender} unusual gender values")
+        
+        # Outlier detection for numeric columns
+        elif detected_type in ['NUMERIC', 'CURRENCY']:
+            numeric_series = pd.to_numeric(series, errors='coerce')
+            non_null = numeric_series.dropna()
+            if len(non_null) > 10:
+                Q1 = non_null.quantile(0.25)
+                Q3 = non_null.quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                outlier_mask = (non_null < lower_bound) | (non_null > upper_bound)
+                outlier_count = int(outlier_mask.sum())
+                if outlier_count > 0:
+                    issues.append({
+                        "type": "outliers_detected",
+                        "message": f"{outlier_count} potential outliers detected",
+                        "count": outlier_count,
+                        "severity": "medium"
+                    })
+                    suggestions.append(f"Consider removing {outlier_count} outliers")
         
         profile['issues'] = issues
         profile['suggestions'] = suggestions
     
-    def _prepare_preview(self, df: pd.DataFrame, limit: int = 500) -> List[Dict]:
-        """Prepare preview data (JSON serializable) - INCREASED LIMIT to 500"""
+    def _prepare_preview(self, df: pd.DataFrame, limit: int = 5000) -> List[Dict]:
+        """Prepare preview data (JSON serializable)"""
         preview = []
         for _, row in df.head(limit).iterrows():
             row_dict = {}
